@@ -21,6 +21,55 @@ jobs:
       - run: flutter analyze
       - run: flutter test
 
+  worker-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: worker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm test
+
+  # السيرفر (Cloudflare Worker) ينشر من master بس، أو يدوياً من زر Run workflow.
+  deploy-worker:
+    needs: worker-test
+    if: github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Cloudflare secrets
+        id: check
+        working-directory: .
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::warning::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID not set; skipping server deploy"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Deploy server
+        if: steps.check.outputs.ready == 'true'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: worker
+          wranglerVersion: '4'
+          secrets: |
+            BOT_TOKEN
+            CHAT_ID
+            FIREBASE_SERVICE_ACCOUNT
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+
   android:
     needs: test
     runs-on: ubuntu-latest
@@ -58,11 +107,14 @@ jobs:
             echo "keyAlias=upload"
             echo "storeFile=upload-keystore.jks"
           } > android/key.properties
+      # رابط السيرفر: https://lacasa-store.<subdomain>.workers.dev من حساب Cloudflare.
+      - name: Find server URL
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: ../.github/scripts/notify-url.sh >> "$GITHUB_ENV"
       - name: Build APK
-        run: >
-          flutter build apk --release
-          --dart-define=BOT_TOKEN=${{ secrets.BOT_TOKEN }}
-          --dart-define=CHAT_ID=${{ secrets.CHAT_ID }}
+        run: flutter build apk --release --dart-define=NOTIFY_URL="$NOTIFY_URL"
       - name: Show APK signing certificate
         run: |
           APKSIGNER=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
@@ -82,9 +134,11 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
+      - name: Find server URL
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: ../.github/scripts/notify-url.sh >> "$GITHUB_ENV"
       # بناء بدون توقيع للتأكد إنه يشتغل. للنشر على App Store يحتاج حساب Apple Developer.
       - name: Build iOS (no codesign)
-        run: >
-          flutter build ios --release --no-codesign
-          --dart-define=BOT_TOKEN=${{ secrets.BOT_TOKEN }}
-          --dart-define=CHAT_ID=${{ secrets.CHAT_ID }}
+        run: flutter build ios --release --no-codesign --dart-define=NOTIFY_URL="$NOTIFY_URL"

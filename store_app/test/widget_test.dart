@@ -1,8 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:lacasa_store/data/catalog.dart';
 import 'package:lacasa_store/main.dart';
 import 'package:lacasa_store/models/content.dart';
@@ -70,7 +73,7 @@ class FakeAuthService implements AuthService {
   }
 }
 
-class RecordingNotifier extends TelegramNotifier {
+class RecordingNotifier extends OrderNotifier {
   final sent = <StoreOrder>[];
 
   @override
@@ -99,7 +102,7 @@ Product sample(int i) => sampleProducts[i];
 Widget app(
   StoreRepository repo, {
   AuthService? auth,
-  TelegramNotifier? notifier,
+  OrderNotifier? notifier,
   MediaUploader? uploader,
   bool showSplash = false,
 }) =>
@@ -190,20 +193,30 @@ void main() {
     expect(matchesQuery(sample(0), 'عطر'), isFalse);
   });
 
-  test('telegram message has order day, delivery day and pickup method', () {
-    final cart = Cart()..add(sample(2).copyWith(id: 'c'), 2);
-    final order = StoreOrder.fromCart(
-      const Customer(name: 'علي', phone: '07701234567', address: 'بغداد'),
-      cart,
-      deliveryDay: 'الخميس',
-      pickupMethod: PickupMethod.pickup,
-    ).copyWith(id: 'o42');
-    final message = TelegramNotifier.buildMessage(order, now: DateTime(2026, 10, 24, 9, 5));
-    expect(message, contains('وقت الطلب: السبت 2026/10/24 09:05'));
-    expect(message, contains('يوم التسليم: الخميس'));
-    expect(message, contains('طريقة الاستلام: استلام من المحل'));
-    expect(message, contains('${sample(2).name} × 2'));
-    expect(message, contains('o42'));
+  test('order notifier posts only the order id to the server', () async {
+    final requests = <http.Request>[];
+    final client = MockClient((request) async {
+      requests.add(request);
+      return http.Response('{"ok":true}', 200);
+    });
+    const order = StoreOrder(
+      id: 'o42',
+      customer: Customer(name: 'علي', phone: '07701234567'),
+      items: [],
+      total: 1,
+    );
+    await OrderNotifier(client: client, endpoint: 'https://srv.example/notify-order').notify(order);
+    expect(requests.single.url.toString(), 'https://srv.example/notify-order');
+    expect(jsonDecode(requests.single.body), {'orderId': 'o42'});
+
+    // بدون رابط، أو بدون رقم طلب، ما يدز شي.
+    await OrderNotifier(client: client, endpoint: '').notify(order);
+    await OrderNotifier(client: client, endpoint: 'https://srv.example/x').notify(order.copyWith(id: ''));
+    expect(requests, hasLength(1));
+
+    // فشل السيرفر ما يوكف الطلب.
+    final failing = MockClient((_) async => throw Exception('offline'));
+    await OrderNotifier(client: failing, endpoint: 'https://srv.example/x').notify(order);
   });
 
   test('user orders only include that user', () async {

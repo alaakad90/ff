@@ -1,59 +1,35 @@
+import 'dart:convert';
+
 import 'package:http/http.dart' as http;
 
 import '../models/order.dart';
-import '../models/product.dart';
 
-/// يرسل إشعار بالطلب لمجموعة تليجرام مالت المتجر.
+/// يبلغ سيرفر المتجر (Cloudflare Worker) إن اكو طلب جديد.
+/// السيرفر يقرا الطلب من Firestore بنفسه ويدز رسالة التليجرام،
+/// فتوكن البوت ما يكون داخل التطبيق.
 ///
-/// التوكن ما ينكتب بالكود. ينطى وقت البناء:
-///   flutter build apk --dart-define=BOT_TOKEN=... --dart-define=CHAT_ID=...
-/// وبـ GitHub Actions ينقرا من الـ Secrets.
-/// إذا ما انطى، الطلب ينحفظ بقاعدة البيانات بس وما يوصل إشعار.
-class TelegramNotifier {
-  static const _botToken = String.fromEnvironment('BOT_TOKEN');
-  static const _chatId = String.fromEnvironment('CHAT_ID');
+/// الرابط ينطى وقت البناء:
+///   `flutter build apk --dart-define=NOTIFY_URL=https://lacasa-store.SUBDOMAIN.workers.dev/notify-order`
+/// وGitHub Actions يحسبه من حساب Cloudflare. إذا ما انطى، الطلب ينحفظ بس وما يوصل إشعار.
+class OrderNotifier {
+  static const _endpoint = String.fromEnvironment('NOTIFY_URL');
 
   final http.Client _client;
+  final String endpoint;
 
-  TelegramNotifier({http.Client? client}) : _client = client ?? http.Client();
-
-  static String _two(int n) => n.toString().padLeft(2, '0');
-
-  static String buildMessage(StoreOrder order, {DateTime? now}) {
-    final customer = order.customer;
-    final at = now ?? DateTime.now();
-    final lines = <String>[
-      '🛍️ طلب جديد',
-      if (order.id.isNotEmpty) '🔖 رقم الطلب: ${order.id}',
-      '🕒 وقت الطلب: ${weekDayName(at)} ${at.year}/${_two(at.month)}/${_two(at.day)} '
-          '${_two(at.hour)}:${_two(at.minute)}',
-      '',
-      '📅 يوم التسليم: ${order.deliveryDay}',
-      '🚚 طريقة الاستلام: ${order.pickupMethod.label}',
-      '',
-      '👤 الاسم: ${customer.name}',
-      '📞 الهاتف: ${customer.phone}',
-      if (customer.address.isNotEmpty) '📍 العنوان: ${customer.address}',
-      if (customer.notes.isNotEmpty) '📝 ملاحظات: ${customer.notes}',
-      '',
-      '📦 المنتجات:',
-      for (final item in order.items)
-        '• ${item.name} × ${item.quantity} = ${formatPrice(item.total)}',
-      '',
-      '💰 المجموع: ${formatPrice(order.total)}',
-      '💵 الدفع: عند الاستلام',
-    ];
-    return lines.join('\n');
-  }
+  OrderNotifier({http.Client? client, String? endpoint})
+      : _client = client ?? http.Client(),
+        endpoint = endpoint ?? _endpoint;
 
   /// ما يرمي أخطاء: الطلب محفوظ أصلاً، والإشعار إضافة.
   Future<void> notify(StoreOrder order) async {
-    if (_botToken.isEmpty || _chatId.isEmpty) return;
+    if (endpoint.isEmpty || order.id.isEmpty) return;
     try {
       await _client
           .post(
-            Uri.https('api.telegram.org', '/bot$_botToken/sendMessage'),
-            body: {'chat_id': _chatId, 'text': buildMessage(order)},
+            Uri.parse(endpoint),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'orderId': order.id}),
           )
           .timeout(const Duration(seconds: 15));
     } catch (_) {

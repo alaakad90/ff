@@ -26,7 +26,7 @@ Future<void> main() async {
 class StoreApp extends StatelessWidget {
   final StoreRepository repository;
   final AuthService auth;
-  final TelegramNotifier? notifier;
+  final OrderNotifier? notifier;
   final MediaUploader? uploader;
   final bool showSplash;
 
@@ -45,7 +45,7 @@ class StoreApp extends StatelessWidget {
       providers: [
         Provider.value(value: repository),
         Provider.value(value: auth),
-        Provider.value(value: notifier ?? TelegramNotifier()),
+        Provider.value(value: notifier ?? OrderNotifier()),
         Provider<MediaUploader>.value(value: uploader ?? SupabaseUploader()),
         ChangeNotifierProvider(create: (_) => Cart()),
         StreamProvider<Session>(

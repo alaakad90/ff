@@ -68,14 +68,25 @@ GitHub Actions يوقع الـ APK بمفتاح ثابت إذا هذني الـ 
 الزر ما يبين إلا لما تنحط القيم. الصور تتصغر بالموبايل قبل الرفع (عرض أقصاه 1600).
 الفيديو أقصاه دقيقتين و50 MB؛ وأفضل يكون mp4، لأن فيديوهات الآيفون (HEVC) ما تشتغل على كل أجهزة الأندرويد.
 
-## إشعار تليجرام
-التوكن ما ينكتب بالكود. ينطى وقت البناء:
+## إشعار تليجرام (السيرفر)
+الإشعار يندز من سيرفر صغير على Cloudflare Workers (مجلد `worker/` بأول المستودع)، مو من التطبيق،
+فتوكن البوت ما يكون داخل الـ APK:
 
-```bash
-flutter run --dart-define=BOT_TOKEN=xxxx --dart-define=CHAT_ID=-100xxxx
-```
+1. التطبيق يحفظ الطلب بـ Firestore، وبعدها يدز رقمه لـ `POST /notify-order`.
+2. السيرفر يقرا الطلب بمفتاح خدمة Firebase، ويتأكد إنه جديد (أقل من ساعة) وما انبعث قبل.
+3. يحط `notifiedAt` على الطلب بشرط ما تغير (حتى ما تنبعث الرسالة مرتين)، ويدز للتليجرام.
 
-بـ GitHub: Settings ← Secrets and variables ← Actions، وضيف `BOT_TOKEN` و `CHAT_ID`.
+GitHub Secrets المطلوبة:
+
+| Secret | شنو |
+|---|---|
+| `CLOUDFLARE_API_TOKEN` | توكن بقالب "Edit Cloudflare Workers" |
+| `CLOUDFLARE_ACCOUNT_ID` | رقم حساب Cloudflare |
+| `FIREBASE_SERVICE_ACCOUNT` | محتوى ملف مفتاح الخدمة (JSON) من Firebase ← Service accounts |
+| `BOT_TOKEN` و `CHAT_ID` | البوت والمجموعة |
+
+السيرفر ينشر أوتوماتيكياً مع كل دمج بـ `master` (أو من زر Run workflow)، والتطبيق ياخذ رابطه
+(`https://lacasa-store.<subdomain>.workers.dev/notify-order`) وقت البناء. اختبارات السيرفر: `cd worker && npm test`.
 
 ## الأيقونة
 الأيقونة تنولد من `assets/icon/`:

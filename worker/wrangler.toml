@@ -1,0 +1,7 @@
+# سيرفر متجر لاكاسا على Cloudflare Workers.
+# ينشر أوتوماتيكياً من GitHub Actions (.github/workflows/build.yml) لما يتدمج شي بـ master.
+# الأسرار (BOT_TOKEN، CHAT_ID، FIREBASE_SERVICE_ACCOUNT) تنحط من GitHub Secrets وقت النشر.
+name = "lacasa-store"
+main = "src/index.js"
+compatibility_date = "2025-10-01"
+workers_dev = true

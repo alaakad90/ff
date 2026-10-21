@@ -69,7 +69,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     final cart = context.read<Cart>();
     final session = context.read<Session>();
     final repository = context.read<StoreRepository>();
-    final notifier = context.read<TelegramNotifier>();
+    final notifier = context.read<OrderNotifier>();
     final customer = Customer(
       name: _name.text.trim(),
       phone: _phone.text.trim(),
