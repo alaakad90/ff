@@ -31,6 +31,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '858636711977',
     projectId: 'lacasa-store-ef68f',
     storageBucket: 'lacasa-store-ef68f.firebasestorage.app',
+    iosClientId: '858636711977-17kd0ivmrgkah405244vmehp9a5np2g2.apps.googleusercontent.com',
     iosBundleId: 'org.lacasa.lacasaStore',
   );
 }

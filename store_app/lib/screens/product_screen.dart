@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/product.dart';
 import '../state/cart.dart';
 import '../widgets/cart_button.dart';
+import '../widgets/product_grid.dart';
 import '../widgets/product_image.dart';
 
 class ProductScreen extends StatefulWidget {
@@ -29,7 +30,7 @@ class _ProductScreenState extends State<ProductScreen> {
         children: [
           AspectRatio(
             aspectRatio: 1.4,
-            child: ProductImage(product: product, iconSize: 120),
+            child: ProductImage(product: product, iconSize: 120, hero: true),
           ),
           Padding(
             padding: const EdgeInsets.all(16),
@@ -41,7 +42,7 @@ class _ProductScreenState extends State<ProductScreen> {
                 Text(
                   formatPrice(product.price),
                   style: theme.textTheme.titleLarge?.copyWith(
-                    color: theme.colorScheme.primary,
+                    color: theme.colorScheme.secondary,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -80,10 +81,7 @@ class _ProductScreenState extends State<ProductScreen> {
             onPressed: () {
               context.read<Cart>().add(product, _quantity);
               Navigator.of(context).pop();
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                content: Text('انضاف "${product.name}" للسلة'),
-                duration: const Duration(seconds: 1),
-              ));
+              showAddedToCart(context, product);
             },
           ),
         ),

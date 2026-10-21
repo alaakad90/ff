@@ -17,15 +17,23 @@ class TelegramNotifier {
 
   TelegramNotifier({http.Client? client}) : _client = client ?? http.Client();
 
-  static String buildMessage(StoreOrder order) {
+  static String _two(int n) => n.toString().padLeft(2, '0');
+
+  static String buildMessage(StoreOrder order, {DateTime? now}) {
     final customer = order.customer;
+    final at = now ?? DateTime.now();
     final lines = <String>[
       '🛍️ طلب جديد',
       if (order.id.isNotEmpty) '🔖 رقم الطلب: ${order.id}',
+      '🕒 وقت الطلب: ${weekDayName(at)} ${at.year}/${_two(at.month)}/${_two(at.day)} '
+          '${_two(at.hour)}:${_two(at.minute)}',
+      '',
+      '📅 يوم التسليم: ${order.deliveryDay}',
+      '🚚 طريقة الاستلام: ${order.pickupMethod.label}',
       '',
       '👤 الاسم: ${customer.name}',
       '📞 الهاتف: ${customer.phone}',
-      '📍 العنوان: ${customer.address}',
+      if (customer.address.isNotEmpty) '📍 العنوان: ${customer.address}',
       if (customer.notes.isNotEmpty) '📝 ملاحظات: ${customer.notes}',
       '',
       '📦 المنتجات:',

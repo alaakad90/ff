@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../screens/cart_screen.dart';
 import '../state/cart.dart';
 
+/// زر السلة للصفحات اللي تنفتح فوق الأزرار اللي جوه.
 class CartButton extends StatelessWidget {
   const CartButton({super.key});
 

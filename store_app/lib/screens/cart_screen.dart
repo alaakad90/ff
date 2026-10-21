@@ -5,6 +5,7 @@ import '../models/product.dart';
 import '../state/cart.dart';
 import '../widgets/product_image.dart';
 import 'checkout_screen.dart';
+import 'shell.dart';
 
 class CartScreen extends StatelessWidget {
   const CartScreen({super.key});
@@ -26,7 +27,14 @@ class CartScreen extends StatelessWidget {
                   const Text('السلة فارغة'),
                   const SizedBox(height: 12),
                   OutlinedButton(
-                    onPressed: () => Navigator.of(context).pop(),
+                    onPressed: () {
+                      final navigator = Navigator.of(context);
+                      if (navigator.canPop()) {
+                        navigator.pop();
+                      } else {
+                        AppShell.goTo(context, ShellTab.home);
+                      }
+                    },
                     child: const Text('تسوق هسه'),
                   ),
                 ],

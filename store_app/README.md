@@ -1,42 +1,63 @@
-# متجر لاكاسا
+# La Casa 3D
 
-تطبيق متجر للآيفون والأندرويد مبني بـ Flutter.
+تطبيق متجر La Casa 3D للآيفون والأندرويد، مبني بـ Flutter و Firebase.
 
-| الرئيسية | السلة | إكمال الطلب |
+| البداية | الرئيسية | الأقسام | إكمال الطلب |
+|---|---|---|---|
+| ![](screenshots/splash.png) | ![](screenshots/home.png) | ![](screenshots/categories.png) | ![](screenshots/checkout.png) |
+
+| الحساب | لوحة التحكم: الطلبات | لوحة التحكم: تعديل قسم |
 |---|---|---|
-| ![](screenshots/home.png) | ![](screenshots/cart.png) | ![](screenshots/checkout.png) |
+| ![](screenshots/account.png) | ![](screenshots/admin_orders.png) | ![](screenshots/admin_category.png) |
 
-| الطلبات (المدير) | المنتجات (المدير) | تعديل منتج |
-|---|---|---|
-| ![](screenshots/admin_orders.png) | ![](screenshots/admin_products.png) | ![](screenshots/admin_edit.png) |
+## للزبون
+- شاشة بداية بحركة للشعار
+- الأزرار اللي جوه: الرئيسية، الأقسام، ريلز، السلة، الحساب
+- الرئيسية: مستطيل "ابحث في كل المنتجات"، بنر قلّاب للعروض، الأقسام، وكل المنتجات
+- ريلز: فيديوهات عمودية، وزر يفتح المنتج المربوط بالفيديو
+- إكمال الطلب: توصيل أو استلام من المحل، ويوم التسليم (السبت - الجمعة)، والدفع عند الاستلام
+- الحساب: تسجيل دخول أو حساب جديد بالإيميل أو بحساب Google، طلباتي، معلوماتي، عن المتجر
+- الخط: بالآيفون خط النظام (SF Arabic)، وبالأندرويد IBM Plex Sans Arabic لأن خط Apple ما مسموح بغير أجهزتها
 
-## الميزات
-- واجهة عربية كاملة من اليمين لليسار بخط Amiri
-- أقسام وبحث عن المنتجات
-- صفحة لكل منتج مع اختيار الكمية
-- سلة مشتريات
-- إكمال الطلب (اسم، هاتف، عنوان، ملاحظات) والدفع عند الاستلام
-- المنتجات والطلبات محفوظة بـ Firebase Firestore
-- لوحة تحكم لصاحب المتجر (زر 🛡️ فوق بالصفحة الرئيسية):
-  - متابعة الطلبات وتغيير حالتها (جديد، تم التأكيد، قيد التوصيل، تم التسليم، ملغي)
-  - إضافة وتعديل وحذف المنتجات، وإخفاؤها عن الزباين
-- إشعار بكل طلب جديد على مجموعة تليجرام (اختياري)
+## لوحة التحكم
+ما إلها أي زر ظاهر. صاحب المتجر يسجل دخول من تبويب "الحساب"، وإذا حسابه مدير تنفتح اللوحة مباشرة.
 
-## إعداد Firebase (مرة وحدة)
+- **الطلبات:** معلومات الزبون، أزرار واتساب واتصال، يوم التسليم، وتغيير الحالة
+- **المنتجات:** إضافة وتعديل وحذف وإخفاء
+- **الأقسام:** الاسم والترتيب والأيقونة (من 24 أيقونة) أو صورة
+- **العروض:** بنرات الصفحة الرئيسية، وكل بنر ممكن يفتح قسم
+- **الريلز:** روابط فيديو مباشرة (mp4)، وكل فيديو ممكن يتربط بمنتج
+- **المتجر:** نبذة، واتساب، رقم الاتصال، العنوان، أوقات الدوام، إنستغرام
+
+## إعداد Firebase
 المشروع: `lacasa-store-ef68f`. الإعدادات موجودة بـ `lib/firebase_options.dart`.
 
-1. **قواعد الحماية:** انسخ محتوى `firestore.rules` والصقه بـ Firestore ← Rules، واضغط Publish.
-2. **حساب المدير:** بـ Authentication ← Users ضيف إيميلك وباسورد.
-3. **تفعيل المدير:** ادخل للوحة التحكم من التطبيق. راح يطلعلك رمز (UID).
-   بـ Firestore ← Data سوي collection بأسم `admins`، وضيف document يكون الـ Document ID مالته هو هذا الرمز (الحقول تكدر تخليها فارغة، أو ضيف حقل مثل `name`).
-4. اطلع وارجع ادخل للوحة التحكم.
+1. **قواعد الحماية:** كل ما يتغير `firestore.rules`، انسخه كله والصقه بـ Firestore ← Rules، واضغط Publish.
+2. **حساب المدير:** بـ Authentication ← Users ضيف إيميلك وباسورد، وبـ Firestore سوي document بـ `admins/{UID}`.
 
-## الصور
-خطة Spark المجانية ما بيها رفع صور، فكل منتج ياخذ **رابط صورة** يبدي بـ `https://`.
-إذا ماكو رابط، تبين أيقونة القسم.
+## مفتاح التوقيع (أندرويد)
+GitHub Actions يوقع الـ APK بمفتاح ثابت إذا هذني الـ Secrets موجودة:
 
-## الأقسام
-الأقسام ثابتة بملف `lib/data/catalog.dart`.
+| Secret | القيمة |
+|---|---|
+| `ANDROID_KEYSTORE_BASE64` | ملف المفتاح `.jks` بصيغة base64 |
+| `ANDROID_KEYSTORE_PASSWORD` | باسورد المفتاح (الـ alias هو `upload`) |
+
+بدونهم يوقع بمفتاح debug يتغير كل بناء، فالتحديث ما ينصب فوق النسخة القديمة ودخول كوكل ما يشتغل.
+**احتفظ بنسخة من ملف المفتاح والباسورد بمكان آمن.** خطوة "Show APK signing certificate" بالبناء تطبع بصمة SHA-1 و SHA-256.
+
+## دخول كوكل
+1. Firebase ← Project settings ← تطبيق الأندرويد ← **Add fingerprint**: ضيف SHA-1 و SHA-256 مال مفتاح التوقيع.
+2. Authentication ← Sign-in method ← فعّل **Google**.
+3. نزّل `google-services.json` و `GoogleService-Info.plist` من جديد، وحط القيم بـ `lib/google_sign_in_config.dart`:
+   `googleWebClientId` (oauth_client بـ client_type: 3) و `googleIosClientId` (CLIENT_ID).
+4. للآيفون: ضيف REVERSED_CLIENT_ID كـ URL scheme بـ `ios/Runner/Info.plist`.
+
+الزر ما يبين إلا لما تنحط القيم.
+
+## الصور والفيديوهات
+خطة Spark المجانية ما بيها رفع ملفات، فالصور والفيديوهات تنحط كروابط تبدي بـ `https://`.
+للصور: [imgbb.com](https://imgbb.com) (Direct link). للفيديو: [Cloudinary](https://cloudinary.com) يعطي رابط mp4 مباشر.
 
 ## إشعار تليجرام
 التوكن ما ينكتب بالكود. ينطى وقت البناء:
@@ -45,8 +66,14 @@
 flutter run --dart-define=BOT_TOKEN=xxxx --dart-define=CHAT_ID=-100xxxx
 ```
 
-بـ GitHub: روح على Settings ← Secrets and variables ← Actions، وضيف `BOT_TOKEN` و `CHAT_ID`.
-بدونهم الطلبات تنحفظ وتبين بلوحة التحكم بس ما يوصل إشعار.
+بـ GitHub: Settings ← Secrets and variables ← Actions، وضيف `BOT_TOKEN` و `CHAT_ID`.
+
+## الأيقونة
+الأيقونة تنولد من `assets/icon/`:
+
+```bash
+dart run flutter_launcher_icons
+```
 
 ## البناء
 - **أندرويد:** `flutter build apk --release`

@@ -38,9 +38,14 @@ dependencies:
   http: ^1.6.0
   flutter_localizations:
     sdk: flutter
-  firebase_core: ^5.0.0
-  cloud_firestore: ^7.0.0
-  firebase_auth: ^7.0.0
+  # لا ترفع Firebase لـ 5.x قبل ما google_sign_in_ios يدعم GoogleSignIn-iOS 10:
+  # firebase-ios-sdk 13 يحتاج gtm-session-fetcher 4+ و GoogleSignIn-iOS 9 يحتاج أقل من 4.
+  firebase_core: ^4.15.0
+  cloud_firestore: ^6.0.0
+  firebase_auth: ^6.7.0
+  url_launcher: ^6.3.3
+  video_player: ^2.14.1
+  google_sign_in: ^7.2.0
 
 dev_dependencies:
   flutter_test:
@@ -52,6 +57,7 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -64,10 +70,27 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  assets:
+    - assets/images/
+
   fonts:
-    - family: Amiri
+    - family: IBMPlexSansArabic
       fonts:
-        - asset: assets/fonts/Amiri-Regular.ttf
+        - asset: assets/fonts/IBMPlexSansArabic-Regular.ttf
+        - asset: assets/fonts/IBMPlexSansArabic-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/IBMPlexSansArabic-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/IBMPlexSansArabic-Bold.ttf
+          weight: 700
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: assets/icon/icon.png
+  remove_alpha_ios: true
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: assets/icon/icon_foreground.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:

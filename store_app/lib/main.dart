@@ -4,11 +4,14 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 
 import 'firebase_options.dart';
-import 'screens/home_screen.dart';
+import 'models/content.dart';
+import 'screens/shell.dart';
+import 'screens/splash_screen.dart';
 import 'services/auth_service.dart';
 import 'services/order_service.dart';
 import 'services/store_repository.dart';
 import 'state/cart.dart';
+import 'theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -23,22 +26,43 @@ class StoreApp extends StatelessWidget {
   final StoreRepository repository;
   final AuthService auth;
   final TelegramNotifier? notifier;
+  final bool showSplash;
 
-  const StoreApp({super.key, required this.repository, required this.auth, this.notifier});
+  const StoreApp({
+    super.key,
+    required this.repository,
+    required this.auth,
+    this.notifier,
+    this.showSplash = true,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = ColorScheme.fromSeed(seedColor: const Color(0xFF8E4A5C));
-
     return MultiProvider(
       providers: [
         Provider.value(value: repository),
         Provider.value(value: auth),
         Provider.value(value: notifier ?? TelegramNotifier()),
         ChangeNotifierProvider(create: (_) => Cart()),
+        StreamProvider<Session>(
+          create: (_) => auth.watchSession(),
+          initialData: Session.guest,
+          catchError: (_, _) => Session.guest,
+        ),
+        // الأقسام ومعلومات المتجر تنحتاج بأكثر من صفحة، فنحملها مرة وحدة.
+        StreamProvider<List<Category>>(
+          create: (_) => repository.watchCategories(),
+          initialData: const [],
+          catchError: (_, _) => const [],
+        ),
+        StreamProvider<StoreInfo>(
+          create: (_) => repository.watchStoreInfo(),
+          initialData: const StoreInfo(),
+          catchError: (_, _) => const StoreInfo(),
+        ),
       ],
       child: MaterialApp(
-        title: 'متجر لاكاسا',
+        title: 'La Casa 3D',
         debugShowCheckedModeBanner: false,
         locale: const Locale('ar', 'IQ'),
         supportedLocales: const [Locale('ar', 'IQ')],
@@ -47,20 +71,8 @@ class StoreApp extends StatelessWidget {
           GlobalWidgetsLocalizations.delegate,
           GlobalCupertinoLocalizations.delegate,
         ],
-        theme: ThemeData(
-          colorScheme: colorScheme,
-          fontFamily: 'Amiri',
-          inputDecorationTheme: InputDecorationTheme(
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-          filledButtonTheme: FilledButtonThemeData(
-            style: FilledButton.styleFrom(
-              minimumSize: const Size.fromHeight(52),
-              textStyle: const TextStyle(fontSize: 18, fontFamily: 'Amiri'),
-            ),
-          ),
-        ),
-        home: const HomeScreen(),
+        theme: buildTheme(),
+        home: showSplash ? const SplashScreen(next: AppShell()) : const AppShell(),
       ),
     );
   }
