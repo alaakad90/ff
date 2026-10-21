@@ -10,6 +10,7 @@ import 'package:lacasa_store/models/product.dart';
 import 'package:lacasa_store/screens/search_screen.dart';
 import 'package:lacasa_store/services/auth_service.dart';
 import 'package:lacasa_store/services/contact.dart';
+import 'package:lacasa_store/services/media_uploader.dart';
 import 'package:lacasa_store/services/order_service.dart';
 import 'package:lacasa_store/services/store_repository.dart';
 import 'package:lacasa_store/state/cart.dart';
@@ -75,18 +76,37 @@ class RecordingNotifier extends TelegramNotifier {
   Future<void> notify(StoreOrder order) async => sent.add(order);
 }
 
+class FakeUploader implements MediaUploader {
+  @override
+  bool enabled;
+
+  /// الرابط اللي يرجعه، أو null كأن صاحب المتجر سكر المعرض.
+  String? result;
+  final picked = <MediaKind>[];
+
+  FakeUploader({this.enabled = false, this.result});
+
+  @override
+  Future<String?> pickAndUpload(MediaKind kind) async {
+    picked.add(kind);
+    return result;
+  }
+}
+
 Product sample(int i) => sampleProducts[i];
 
 Widget app(
   StoreRepository repo, {
   AuthService? auth,
   TelegramNotifier? notifier,
+  MediaUploader? uploader,
   bool showSplash = false,
 }) =>
     StoreApp(
       repository: repo,
       auth: auth ?? FakeAuthService(),
       notifier: notifier ?? RecordingNotifier(),
+      uploader: uploader ?? FakeUploader(),
       showSplash: showSplash,
     );
 
@@ -142,6 +162,17 @@ void main() {
     expect(Reel.fromMap('r', reel.toMap()).toMap(), reel.toMap());
     const category = Category(name: 'خشب', iconKey: 'chair', order: 3);
     expect(Category.fromMap('c', category.toMap()).toMap(), category.toMap());
+  });
+
+  test('Cloudinary links get size and format transformations', () {
+    expect(
+      deliveryUrl('https://res.cloudinary.com/demo/image/upload/v1/lacasa/a.jpg', MediaKind.image),
+      'https://res.cloudinary.com/demo/image/upload/f_auto,q_auto,c_limit,w_1600/v1/lacasa/a.jpg',
+    );
+    expect(
+      deliveryUrl('https://res.cloudinary.com/demo/video/upload/v1/lacasa/clip.mov', MediaKind.video),
+      'https://res.cloudinary.com/demo/video/upload/c_limit,w_1080,q_auto,vc_h264/v1/lacasa/clip.mp4',
+    );
   });
 
   test('search matches name and description', () {
@@ -312,6 +343,52 @@ void main() {
     expect(find.text('حسين'), findsOneWidget);
     expect(find.text('طلباتي'), findsOneWidget);
     expect(repo.profiles['g1']?.name, 'حسين');
+  });
+
+  testWidgets('admin uploads a product photo from the phone', (tester) async {
+    usePhoneSize(tester);
+    final repo = InMemoryStoreRepository(categories: sampleCategories);
+    final auth = FakeAuthService(adminEmails: {'owner@example.com'});
+    final uploader = FakeUploader();
+    await tester.pumpWidget(app(repo, auth: auth, uploader: uploader));
+    await tester.pumpAndSettle();
+    await tapTab(tester, 'الحساب');
+    await tester.enterText(find.byType(TextFormField).at(0), 'owner@example.com');
+    await tester.enterText(find.byType(TextFormField).at(1), 'secret');
+    await tester.tap(find.widgetWithText(FilledButton, 'دخول'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(Tab, 'المنتجات'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('منتج جديد'));
+    await tester.pumpAndSettle();
+
+    // بدون إعداد Cloudinary ماكو زر رفع.
+    expect(find.text('اختار صورة من الموبايل'), findsNothing);
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+
+    uploader
+      ..enabled = true
+      ..result = 'https://res.cloudinary.com/demo/image/upload/f_auto/a.jpg';
+    await tester.tap(find.text('منتج جديد'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('اختار صورة من الموبايل'));
+    await tester.tap(find.text('اختار صورة من الموبايل'));
+    await tester.pumpAndSettle();
+    expect(uploader.picked, [MediaKind.image]);
+
+    await tester.enterText(find.widgetWithText(TextFormField, 'اسم المنتج'), 'ساعة خشب');
+    await tester.enterText(find.widgetWithText(TextFormField, 'السعر'), '30000');
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('هدايا').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('حفظ'));
+    await tester.pumpAndSettle();
+
+    final saved = (await repo.watchProducts().first).single;
+    expect(saved.name, 'ساعة خشب');
+    expect(saved.imageUrl, uploader.result);
   });
 
   testWidgets('admin login from the account tab opens the control panel', (tester) async {

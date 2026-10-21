@@ -4,7 +4,9 @@ import 'package:provider/provider.dart';
 import '../../data/category_icons.dart';
 import '../../models/content.dart';
 import '../../models/product.dart';
+import '../../services/media_uploader.dart';
 import '../../services/store_repository.dart';
+import '../../widgets/media_url_field.dart';
 import '../../widgets/product_image.dart';
 
 String? validateHttpsUrl(String? v, {bool required = false}) {
@@ -195,15 +197,11 @@ class _CategoryEditScreenState extends State<CategoryEditScreen> {
           ],
         ),
         const SizedBox(height: 20),
-        TextFormField(
+        MediaUrlField(
           controller: _imageUrl,
-          keyboardType: TextInputType.url,
-          textDirection: TextDirection.ltr,
-          decoration: const InputDecoration(
-            labelText: 'أو صورة بدال الأيقونة (رابط، اختياري)',
-            hintText: 'https://...',
-          ),
-          onChanged: (_) => refresh(),
+          kind: MediaKind.image,
+          label: 'أو صورة بدال الأيقونة (اختياري)',
+          onChanged: refresh,
           validator: validateHttpsUrl,
         ),
       ],
@@ -277,12 +275,11 @@ class _BannerEditScreenState extends State<BannerEditScreen> {
           style: Theme.of(context).textTheme.bodySmall,
         ),
         const SizedBox(height: 16),
-        TextFormField(
+        MediaUrlField(
           controller: _imageUrl,
-          keyboardType: TextInputType.url,
-          textDirection: TextDirection.ltr,
-          decoration: const InputDecoration(labelText: 'رابط الصورة', hintText: 'https://...'),
-          onChanged: (_) => refresh(),
+          kind: MediaKind.image,
+          label: 'رابط الصورة',
+          onChanged: refresh,
           validator: validateHttpsUrl,
         ),
         _gap,
@@ -366,16 +363,11 @@ class _ReelEditScreenState extends State<ReelEditScreen> {
       )),
       onDelete: existing == null ? null : (repo) => repo.deleteReel(existing.id),
       fields: (context, refresh) => [
-        TextFormField(
+        MediaUrlField(
           controller: _videoUrl,
-          keyboardType: TextInputType.url,
-          textDirection: TextDirection.ltr,
-          decoration: const InputDecoration(
-            labelText: 'رابط الفيديو',
-            hintText: 'https://.../video.mp4',
-            helperText: 'رابط مباشر لملف الفيديو (mp4)، مو رابط صفحة يوتيوب أو إنستغرام',
-            helperMaxLines: 2,
-          ),
+          kind: MediaKind.video,
+          label: 'رابط الفيديو',
+          helperText: 'رابط مباشر لملف الفيديو (mp4)، مو رابط صفحة يوتيوب أو إنستغرام',
           validator: (v) => validateHttpsUrl(v, required: true),
         ),
         _gap,

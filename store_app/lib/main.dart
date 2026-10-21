@@ -8,6 +8,7 @@ import 'models/content.dart';
 import 'screens/shell.dart';
 import 'screens/splash_screen.dart';
 import 'services/auth_service.dart';
+import 'services/media_uploader.dart';
 import 'services/order_service.dart';
 import 'services/store_repository.dart';
 import 'state/cart.dart';
@@ -26,6 +27,7 @@ class StoreApp extends StatelessWidget {
   final StoreRepository repository;
   final AuthService auth;
   final TelegramNotifier? notifier;
+  final MediaUploader? uploader;
   final bool showSplash;
 
   const StoreApp({
@@ -33,6 +35,7 @@ class StoreApp extends StatelessWidget {
     required this.repository,
     required this.auth,
     this.notifier,
+    this.uploader,
     this.showSplash = true,
   });
 
@@ -43,6 +46,7 @@ class StoreApp extends StatelessWidget {
         Provider.value(value: repository),
         Provider.value(value: auth),
         Provider.value(value: notifier ?? TelegramNotifier()),
+        Provider<MediaUploader>.value(value: uploader ?? CloudinaryUploader()),
         ChangeNotifierProvider(create: (_) => Cart()),
         StreamProvider<Session>(
           create: (_) => auth.watchSession(),

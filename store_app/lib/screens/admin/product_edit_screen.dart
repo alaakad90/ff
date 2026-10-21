@@ -3,8 +3,11 @@ import 'package:provider/provider.dart';
 
 import '../../models/content.dart';
 import '../../models/product.dart';
+import '../../services/media_uploader.dart';
 import '../../services/store_repository.dart';
+import '../../widgets/media_url_field.dart';
 import '../../widgets/product_image.dart';
+import 'content_editors.dart' show validateHttpsUrl;
 
 class ProductEditScreen extends StatefulWidget {
   /// null يعني منتج جديد.
@@ -147,19 +150,12 @@ class _ProductEditScreenState extends State<ProductEditScreen> {
               decoration: const InputDecoration(labelText: 'الوصف'),
             ),
             const SizedBox(height: 12),
-            TextFormField(
+            MediaUrlField(
               controller: _imageUrl,
-              keyboardType: TextInputType.url,
-              textDirection: TextDirection.ltr,
-              decoration: const InputDecoration(
-                labelText: 'رابط الصورة (اختياري)',
-                hintText: 'https://...',
-              ),
-              onChanged: (_) => setState(() {}),
-              validator: (v) {
-                final url = (v ?? '').trim();
-                return url.isEmpty || url.startsWith('https://') ? null : 'الرابط لازم يبدي بـ https://';
-              },
+              kind: MediaKind.image,
+              label: 'رابط الصورة (اختياري)',
+              onChanged: () => setState(() {}),
+              validator: validateHttpsUrl,
             ),
             const SizedBox(height: 4),
             SwitchListTile(
