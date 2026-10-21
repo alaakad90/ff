@@ -1,22 +1,29 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-enum AdminStatus { signedOut, notAdmin, admin }
+enum Role { guest, customer, admin }
 
-class AdminSession {
-  final AdminStatus status;
+class Session {
+  final Role role;
   final String uid;
   final String email;
+  final String name;
 
-  const AdminSession(this.status, {this.uid = '', this.email = ''});
+  const Session(this.role, {this.uid = '', this.email = '', this.name = ''});
 
-  static const signedOut = AdminSession(AdminStatus.signedOut);
+  static const guest = Session(Role.guest);
+
+  bool get signedIn => role != Role.guest;
 }
 
-/// تسجيل دخول صاحب المتجر. الحساب يصير مدير إذا عنده وثيقة بـ admins/{uid}.
+/// حساب الزبون وحساب صاحب المتجر بنفس تسجيل الدخول.
+/// الحساب يصير مدير إذا عنده وثيقة بـ admins/{uid}، وما يبين أي شي للزبون.
 abstract class AuthService {
-  Stream<AdminSession> watchSession();
+  Stream<Session> watchSession();
   Future<void> signIn(String email, String password);
+  /// يرجع uid الحساب الجديد.
+  Future<String> signUp(String name, String email, String password);
+  Future<void> sendPasswordReset(String email);
   Future<void> signOut();
 }
 
@@ -28,6 +35,16 @@ class AuthException implements Exception {
   String toString() => message;
 }
 
+String authErrorMessage(String code) => switch (code) {
+      'invalid-credential' || 'wrong-password' || 'user-not-found' => 'الإيميل أو الباسورد غلط',
+      'invalid-email' => 'الإيميل مو صحيح',
+      'email-already-in-use' => 'هذا الإيميل عنده حساب. سجل دخول بدال ما تسوي حساب جديد.',
+      'weak-password' => 'الباسورد ضعيف. خليه 6 أحرف أو أكثر.',
+      'too-many-requests' => 'محاولات كثيرة. انتظر شوية وحاول مرة ثانية.',
+      'network-request-failed' => 'ماكو اتصال بالإنترنت',
+      _ => 'صار خطأ ($code)',
+    };
+
 class FirebaseAuthService implements AuthService {
   final FirebaseAuth _auth;
   final FirebaseFirestore _db;
@@ -37,30 +54,46 @@ class FirebaseAuthService implements AuthService {
         _db = db ?? FirebaseFirestore.instance;
 
   @override
-  Stream<AdminSession> watchSession() => _auth.authStateChanges().asyncMap((user) async {
-        if (user == null) return AdminSession.signedOut;
-        final doc = await _db.collection('admins').doc(user.uid).get();
-        return AdminSession(
-          doc.exists ? AdminStatus.admin : AdminStatus.notAdmin,
+  Stream<Session> watchSession() => _auth.userChanges().asyncMap((user) async {
+        if (user == null) return Session.guest;
+        var isAdmin = false;
+        try {
+          isAdmin = (await _db.collection('admins').doc(user.uid).get()).exists;
+        } catch (_) {
+          // إذا ما كدرنا نتأكد، نتعامل وياه كزبون.
+        }
+        return Session(
+          isAdmin ? Role.admin : Role.customer,
           uid: user.uid,
           email: user.email ?? '',
+          name: user.displayName ?? '',
         );
       });
 
-  @override
-  Future<void> signIn(String email, String password) async {
+  Future<T> _guard<T>(Future<T> Function() action) async {
     try {
-      await _auth.signInWithEmailAndPassword(email: email, password: password);
+      return await action();
     } on FirebaseAuthException catch (e) {
-      throw AuthException(switch (e.code) {
-        'invalid-credential' || 'wrong-password' || 'user-not-found' || 'invalid-email' =>
-          'الإيميل أو الباسورد غلط',
-        'too-many-requests' => 'محاولات كثيرة. انتظر شوية وحاول مرة ثانية.',
-        'network-request-failed' => 'ماكو اتصال بالإنترنت',
-        _ => 'ما كدرنا نسجل الدخول (${e.code})',
-      });
+      throw AuthException(authErrorMessage(e.code));
     }
   }
+
+  @override
+  Future<void> signIn(String email, String password) =>
+      _guard(() => _auth.signInWithEmailAndPassword(email: email, password: password));
+
+  @override
+  Future<String> signUp(String name, String email, String password) => _guard(() async {
+        final cred = await _auth.createUserWithEmailAndPassword(email: email, password: password);
+        final user = cred.user!;
+        await user.updateDisplayName(name);
+        await user.reload();
+        return user.uid;
+      });
+
+  @override
+  Future<void> sendPasswordReset(String email) =>
+      _guard(() => _auth.sendPasswordResetEmail(email: email));
 
   @override
   Future<void> signOut() => _auth.signOut();

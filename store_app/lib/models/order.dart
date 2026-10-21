@@ -16,6 +16,25 @@ enum OrderStatus {
       values.firstWhere((s) => s.value == value, orElse: () => pending);
 }
 
+/// أيام الأسبوع تبدي من السبت، مثل التطبيق القديم.
+const weekDays = ['السبت', 'الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'];
+
+/// اسم اليوم بالعربي. DateTime.weekday: الإثنين = 1 ... الأحد = 7.
+String weekDayName(DateTime date) => weekDays[(date.weekday + 1) % 7];
+
+enum PickupMethod {
+  delivery('delivery', 'توصيل'),
+  pickup('pickup', 'استلام من المحل');
+
+  final String value;
+  final String label;
+
+  const PickupMethod(this.value, this.label);
+
+  static PickupMethod fromValue(String? value) =>
+      values.firstWhere((m) => m.value == value, orElse: () => delivery);
+}
+
 class Customer {
   final String name;
   final String phone;
@@ -25,7 +44,7 @@ class Customer {
   const Customer({
     required this.name,
     required this.phone,
-    required this.address,
+    this.address = '',
     this.notes = '',
   });
 
@@ -86,6 +105,9 @@ class StoreOrder {
   final Customer customer;
   final List<OrderItem> items;
   final int total;
+  final String deliveryDay; // من weekDays
+  final PickupMethod pickupMethod;
+  final String userId; // فارغ إذا الزبون ما مسجل دخول
   final OrderStatus status;
   final DateTime? createdAt;
 
@@ -94,14 +116,27 @@ class StoreOrder {
     required this.customer,
     required this.items,
     required this.total,
+    this.deliveryDay = '',
+    this.pickupMethod = PickupMethod.delivery,
+    this.userId = '',
     this.status = OrderStatus.pending,
     this.createdAt,
   });
 
-  factory StoreOrder.fromCart(Customer customer, Cart cart) => StoreOrder(
+  factory StoreOrder.fromCart(
+    Customer customer,
+    Cart cart, {
+    required String deliveryDay,
+    required PickupMethod pickupMethod,
+    String userId = '',
+  }) =>
+      StoreOrder(
         customer: customer,
         items: cart.items.map(OrderItem.fromCartItem).toList(),
         total: cart.total,
+        deliveryDay: deliveryDay,
+        pickupMethod: pickupMethod,
+        userId: userId,
       );
 
   StoreOrder copyWith({String? id, OrderStatus? status, DateTime? createdAt}) => StoreOrder(
@@ -109,6 +144,9 @@ class StoreOrder {
         customer: customer,
         items: items,
         total: total,
+        deliveryDay: deliveryDay,
+        pickupMethod: pickupMethod,
+        userId: userId,
         status: status ?? this.status,
         createdAt: createdAt ?? this.createdAt,
       );

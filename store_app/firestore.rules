@@ -1,6 +1,6 @@
 rules_version = '2';
 
-// قواعد حماية متجر لاكاسا.
+// قواعد حماية متجر La Casa 3D.
 // انسخ هذا الملف كله والصقه بـ Firebase ← Firestore ← Rules، واضغط Publish.
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -18,22 +18,35 @@ service cloud.firestore {
     function validCustomer(c) {
       return c is map
         && c.keys().hasOnly(['name', 'phone', 'address', 'notes'])
-        && c.keys().hasAll(['name', 'phone', 'address'])
+        && c.keys().hasAll(['name', 'phone'])
         && isText(c.name, 1, 100)
         && isText(c.phone, 7, 20)
-        && isText(c.address, 1, 300)
+        && (!('address' in c) || isText(c.address, 0, 300))
         && (!('notes' in c) || isText(c.notes, 0, 500));
     }
 
     // الزبون يكدر يسوي طلب جديد بس، بحالة "new"، وبشكل صحيح.
+    // إذا الطلب مربوط بحساب، لازم يكون حسابه هو.
     function validNewOrder(o) {
-      return o.keys().hasOnly(['customer', 'items', 'total', 'status', 'createdAt'])
-        && o.keys().hasAll(['customer', 'items', 'total', 'status', 'createdAt'])
+      return o.keys().hasOnly(['customer', 'items', 'total', 'status', 'createdAt',
+                               'deliveryDay', 'pickupMethod', 'userId'])
+        && o.keys().hasAll(['customer', 'items', 'total', 'status', 'createdAt',
+                            'deliveryDay', 'pickupMethod'])
         && validCustomer(o.customer)
         && o.items is list && o.items.size() >= 1 && o.items.size() <= 50
         && o.total is int && o.total > 0 && o.total <= 100000000
         && o.status == 'new'
-        && o.createdAt == request.time;
+        && o.createdAt == request.time
+        && o.deliveryDay in ['السبت', 'الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة']
+        && o.pickupMethod in ['delivery', 'pickup']
+        && (!('userId' in o) || (request.auth != null && o.userId == request.auth.uid));
+    }
+
+    function validProfile(p) {
+      return p.keys().hasOnly(['name', 'phone', 'address'])
+        && isText(p.get('name', ''), 0, 100)
+        && isText(p.get('phone', ''), 0, 20)
+        && isText(p.get('address', ''), 0, 300);
     }
 
     match /admins/{uid} {
@@ -42,14 +55,41 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    match /products/{productId} {
+    // محتوى المتجر: الكل يقرا، المدير بس يعدل.
+    match /products/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /categories/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /banners/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /reels/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /settings/{id} {
       allow read: if true;
       allow write: if isAdmin();
     }
 
+    // معلومات الزبون: بس صاحب الحساب يشوفها ويعدلها.
+    match /users/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if request.auth != null && request.auth.uid == uid
+        && validProfile(request.resource.data);
+    }
+
     match /orders/{orderId} {
       allow create: if validNewOrder(request.resource.data);
-      allow read, delete: if isAdmin();
+      // الزبون يشوف طلباته بس، والمدير يشوف الكل.
+      allow read: if isAdmin()
+        || (request.auth != null && resource.data.get('userId', '') == request.auth.uid);
+      allow delete: if isAdmin();
       // المدير يغير الحالة بس.
       allow update: if isAdmin()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])

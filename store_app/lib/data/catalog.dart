@@ -1,19 +1,16 @@
-import 'package:flutter/material.dart';
-
+import '../models/content.dart';
 import '../models/product.dart';
 
-// الأقسام ثابتة بالتطبيق. المنتجات تنقرا من Firestore.
-const categories = <Category>[
-  Category(id: 'gifts', name: 'هدايا', icon: Icons.card_giftcard, color: Color(0xFFB5838D)),
-  Category(id: 'flowers', name: 'ورود', icon: Icons.local_florist, color: Color(0xFFE5989B)),
-  Category(id: 'perfume', name: 'عطور', icon: Icons.spa, color: Color(0xFF8D6E63)),
-  Category(id: 'sweets', name: 'حلويات', icon: Icons.cake, color: Color(0xFFF4A261)),
+// بيانات تجريبية يكدر صاحب المتجر يضيفها من لوحة التحكم بضغطة.
+// معرّفات الأقسام نفس اللي استخدمتها المنتجات القديمة حتى تبقى مربوطة.
+
+const sampleCategories = <Category>[
+  Category(id: 'gifts', name: 'هدايا', iconKey: 'gift', order: 1),
+  Category(id: 'flowers', name: 'ورود', iconKey: 'flower', order: 2),
+  Category(id: 'perfume', name: 'عطور', iconKey: 'resin', order: 3),
+  Category(id: 'sweets', name: 'حلويات', iconKey: 'heart', order: 4),
 ];
 
-Category categoryOf(String id) =>
-    categories.firstWhere((c) => c.id == id, orElse: () => categories.first);
-
-/// منتجات تجريبية يكدر صاحب المتجر يضيفها من لوحة التحكم حتى يجرب.
 const sampleProducts = <Product>[
   Product(
     name: 'بوكس هدية فاخر',

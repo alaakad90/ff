@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../data/catalog.dart';
+import '../../models/content.dart';
 import '../../models/product.dart';
 import '../../services/store_repository.dart';
 import '../../widgets/product_image.dart';
@@ -22,7 +22,7 @@ class _ProductEditScreenState extends State<ProductEditScreen> {
   late final _description = TextEditingController(text: widget.product?.description);
   late final _price = TextEditingController(text: widget.product?.price.toString());
   late final _imageUrl = TextEditingController(text: widget.product?.imageUrl);
-  late String _categoryId = widget.product?.categoryId ?? categories.first.id;
+  late String _categoryId = widget.product?.categoryId ?? '';
   late bool _available = widget.product?.available ?? true;
   bool _saving = false;
 
@@ -85,6 +85,7 @@ class _ProductEditScreenState extends State<ProductEditScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final categories = context.watch<List<Category>>();
     return Scaffold(
       appBar: AppBar(
         title: Text(_isNew ? 'منتج جديد' : 'تعديل المنتج'),
@@ -128,12 +129,16 @@ class _ProductEditScreenState extends State<ProductEditScreen> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              initialValue: _categoryId,
-              decoration: const InputDecoration(labelText: 'القسم'),
+              initialValue: categories.any((c) => c.id == _categoryId) ? _categoryId : null,
+              decoration: InputDecoration(
+                labelText: 'القسم',
+                helperText: categories.isEmpty ? 'ضيف الأقسام بالأول من تبويب "الأقسام"' : null,
+              ),
               items: [
                 for (final c in categories) DropdownMenuItem(value: c.id, child: Text(c.name)),
               ],
               onChanged: (v) => setState(() => _categoryId = v ?? _categoryId),
+              validator: (v) => v == null ? 'اختار القسم' : null,
             ),
             const SizedBox(height: 12),
             TextFormField(

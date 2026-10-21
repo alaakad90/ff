@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../data/catalog.dart';
+import '../models/content.dart';
 import '../models/product.dart';
 import '../services/store_repository.dart';
-import '../state/cart.dart';
-import '../widgets/cart_button.dart';
+import '../widgets/banner_carousel.dart';
+import '../widgets/product_grid.dart';
 import '../widgets/product_image.dart';
-import 'admin/admin_gate.dart';
-import 'product_screen.dart';
+import 'categories_screen.dart';
+import 'search_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -18,171 +18,176 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  late final Stream<List<Product>> _products =
-      context.read<StoreRepository>().watchProducts();
-  String? _categoryId;
-  String _query = '';
+  late final _repo = context.read<StoreRepository>();
+  late final Stream<List<Product>> _products = _repo.watchProducts();
+  late final Stream<List<PromoBanner>> _banners = _repo.watchBanners();
 
-  List<Product> _filter(List<Product> products) => products
-      .where((p) => _categoryId == null || p.categoryId == _categoryId)
-      .where((p) => _query.isEmpty || p.name.contains(_query))
-      .toList();
+  void _openCategory(Category category) => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => CategoryProductsScreen(category: category)),
+      );
+
+  void _openBanner(PromoBanner banner) {
+    final category =
+        context.read<List<Category>>().where((c) => c.id == banner.categoryId).firstOrNull;
+    if (category != null) _openCategory(category);
+  }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final categories = context.watch<List<Category>>();
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('متجر لاكاسا'),
-        actions: [
-          IconButton(
-            tooltip: 'لوحة التحكم',
-            icon: const Icon(Icons.admin_panel_settings_outlined),
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const AdminGate()),
-            ),
-          ),
-          const CartButton(),
-        ],
-      ),
-      body: StreamBuilder<List<Product>>(
-        stream: _products,
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return const Center(child: Text('ما كدرنا نحمل المنتجات. تأكد من الإنترنت.'));
-          }
-          if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          return _buildCatalog(_filter(snapshot.data!));
-        },
-      ),
-    );
-  }
-
-  Widget _buildCatalog(List<Product> visible) {
-    return CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: TextField(
-                decoration: const InputDecoration(
-                  hintText: 'دور على منتج...',
-                  prefixIcon: Icon(Icons.search),
+      body: SafeArea(
+        bottom: false,
+        child: CustomScrollView(
+          slivers: [
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                child: Row(
+                  children: [
+                    Image.asset('assets/images/logo.png', height: 34),
+                    const Spacer(),
+                  ],
                 ),
-                onChanged: (value) => setState(() => _query = value.trim()),
               ),
             ),
-          ),
-          SliverToBoxAdapter(
-            child: SizedBox(
-              height: 64,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                children: [
-                  _categoryChip(null, 'الكل', Icons.apps),
-                  for (final c in categories) _categoryChip(c.id, c.name, c.icon),
-                ],
+            const SliverToBoxAdapter(child: SearchField()),
+            SliverToBoxAdapter(
+              child: StreamBuilder<List<PromoBanner>>(
+                stream: _banners,
+                builder: (context, snapshot) {
+                  final banners = snapshot.data ?? const [];
+                  if (banners.isEmpty) return const SizedBox(height: 8);
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 12, bottom: 4),
+                    child: BannerCarousel(banners: banners, onTap: _openBanner),
+                  );
+                },
               ),
             ),
-          ),
-          if (visible.isEmpty)
-            const SliverFillRemaining(
-              hasScrollBody: false,
-              child: Center(child: Text('ماكو منتجات هنا')),
-            )
-          else
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-              sliver: SliverGrid.builder(
-                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                  maxCrossAxisExtent: 220,
-                  mainAxisSpacing: 12,
-                  crossAxisSpacing: 12,
-                  childAspectRatio: 0.7,
+            if (categories.isNotEmpty) ...[
+              _SectionTitle(title: 'الأقسام'),
+              SliverToBoxAdapter(
+                child: SizedBox(
+                  height: 96,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: categories.length,
+                    separatorBuilder: (_, _) => const SizedBox(width: 14),
+                    itemBuilder: (context, i) {
+                      final category = categories[i];
+                      return InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: () => _openCategory(category),
+                        child: SizedBox(
+                          width: 68,
+                          child: Column(
+                            children: [
+                              CategoryAvatar(category: category),
+                              const SizedBox(height: 6),
+                              Text(
+                                category.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodySmall,
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                 ),
-                itemCount: visible.length,
-                itemBuilder: (context, i) => _ProductCard(product: visible[i]),
               ),
+            ],
+            _SectionTitle(title: 'كل المنتجات'),
+            StreamBuilder<List<Product>>(
+              stream: _products,
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return const SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: EmptyMessage(
+                      icon: Icons.wifi_off,
+                      text: 'ما كدرنا نحمل المنتجات. تأكد من الإنترنت.',
+                    ),
+                  );
+                }
+                final products = snapshot.data;
+                if (products == null) {
+                  return const SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+                if (products.isEmpty) {
+                  return const SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: EmptyMessage(icon: Icons.inventory_2_outlined, text: 'ماكو منتجات هنا'),
+                  );
+                }
+                return SliverProductGrid(products: products);
+              },
             ),
-        ],
-    );
-  }
-
-  Widget _categoryChip(String? id, String label, IconData icon) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: ChoiceChip(
-        avatar: Icon(icon, size: 18),
-        label: Text(label),
-        selected: _categoryId == id,
-        onSelected: (_) => setState(() => _categoryId = id),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _ProductCard extends StatelessWidget {
-  final Product product;
+class _SectionTitle extends StatelessWidget {
+  final String title;
 
-  const _ProductCard({required this.product});
+  const _SectionTitle({required this.title});
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => ProductScreen(product: product)),
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 10),
+        child: Text(
+          title,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(child: ProductImage(product: product)),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
-              child: Text(
-                product.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.titleMedium,
-              ),
+      ),
+    );
+  }
+}
+
+/// مستطيل البحث. ينضغط ويفتح صفحة البحث.
+class SearchField extends StatelessWidget {
+  const SearchField({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: Material(
+        color: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: Colors.black.withValues(alpha: 0.12)),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const SearchScreen()),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            child: Row(
+              children: [
+                Icon(Icons.search, color: colors.outline),
+                const SizedBox(width: 10),
+                Text('ابحث في كل المنتجات', style: TextStyle(color: colors.outline, fontSize: 15)),
+              ],
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(4, 0, 10, 4),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsetsDirectional.only(start: 6),
-                      child: Text(
-                        formatPrice(product.price),
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.primary,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-                  IconButton.filledTonal(
-                    tooltip: 'أضف للسلة',
-                    icon: const Icon(Icons.add_shopping_cart, size: 20),
-                    onPressed: () {
-                      context.read<Cart>().add(product);
-                      ScaffoldMessenger.of(context)
-                        ..hideCurrentSnackBar()
-                        ..showSnackBar(SnackBar(
-                          content: Text('انضاف "${product.name}" للسلة'),
-                          duration: const Duration(seconds: 1),
-                        ));
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
