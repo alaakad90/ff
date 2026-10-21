@@ -35,6 +35,11 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
+      # تنزيل الـ NDK من Google يفشل أحياناً، فنستخدم أحدث نسخة منصبة على السيرفر.
+      - name: Use preinstalled Android NDK
+        run: |
+          ls "$ANDROID_HOME/ndk"
+          echo "ANDROID_NDK_VERSION=$(basename "$ANDROID_NDK_LATEST_HOME")" >> "$GITHUB_ENV"
       - name: Build APK
         run: >
           flutter build apk --release

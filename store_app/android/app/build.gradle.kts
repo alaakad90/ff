@@ -7,7 +7,8 @@ plugins {
 android {
     namespace = "org.lacasa.lacasa_store"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    // على GitHub Actions نستخدم الـ NDK المنصب على السيرفر بدال ما ينزل من جديد.
+    ndkVersion = System.getenv("ANDROID_NDK_VERSION")?.takeIf { it.isNotBlank() } ?: flutter.ndkVersion
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
