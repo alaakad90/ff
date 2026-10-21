@@ -62,7 +62,7 @@ class StoreApp extends StatelessWidget {
         ),
       ],
       child: MaterialApp(
-        title: 'La Casa 3D',
+        title: 'متجر لاكاسا',
         debugShowCheckedModeBanner: false,
         locale: const Locale('ar', 'IQ'),
         supportedLocales: const [Locale('ar', 'IQ')],

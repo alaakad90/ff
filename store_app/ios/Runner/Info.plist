@@ -25,7 +25,7 @@
 		<string>https</string>
 	</array>
 	<key>CFBundleDisplayName</key>
-	<string>La Casa 3D</string>
+	<string>متجر لاكاسا</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
