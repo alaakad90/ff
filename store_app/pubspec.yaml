@@ -38,9 +38,11 @@ dependencies:
   http: ^1.6.0
   flutter_localizations:
     sdk: flutter
-  firebase_core: ^5.0.0
-  cloud_firestore: ^7.0.0
-  firebase_auth: ^7.0.0
+  # لا ترفع Firebase لـ 5.x قبل ما google_sign_in_ios يدعم GoogleSignIn-iOS 10:
+  # firebase-ios-sdk 13 يحتاج gtm-session-fetcher 4+ و GoogleSignIn-iOS 9 يحتاج أقل من 4.
+  firebase_core: ^4.15.0
+  cloud_firestore: ^6.0.0
+  firebase_auth: ^6.7.0
   url_launcher: ^6.3.3
   video_player: ^2.14.1
   google_sign_in: ^7.2.0
