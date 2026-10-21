@@ -1,9 +1,11 @@
 import 'dart:convert';
+import 'dart:math';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
-import '../cloudinary_config.dart';
+import '../supabase_config.dart';
 
 enum MediaKind { image, video }
 
@@ -24,74 +26,111 @@ abstract class MediaUploader {
   Future<String?> pickAndUpload(MediaKind kind);
 }
 
-/// روابط Cloudinary بتحويلات تخلي الملف أخف وتشتغل على كل الأجهزة:
-/// الصور بصيغة وجودة تلقائية وعرض أقصاه 1600،
-/// والفيديو mp4 بـ H.264 (فيديوهات الآيفون HEVC ما تشتغل على كل أندرويد).
-String deliveryUrl(String secureUrl, MediaKind kind) {
-  switch (kind) {
-    case MediaKind.image:
-      return secureUrl.replaceFirst('/image/upload/', '/image/upload/f_auto,q_auto,c_limit,w_1600/');
-    case MediaKind.video:
-      return secureUrl
-          .replaceFirst('/video/upload/', '/video/upload/c_limit,w_1080,q_auto,vc_h264/')
-          .replaceFirst(RegExp(r'\.[A-Za-z0-9]+$'), '.mp4');
-  }
+const _contentTypes = {
+  'jpg': 'image/jpeg',
+  'jpeg': 'image/jpeg',
+  'png': 'image/png',
+  'webp': 'image/webp',
+  'heic': 'image/heic',
+  'gif': 'image/gif',
+  'mp4': 'video/mp4',
+  'mov': 'video/quicktime',
+  'm4v': 'video/x-m4v',
+  '3gp': 'video/3gpp',
+  'webm': 'video/webm',
+};
+
+/// مسار الملف داخل الـ bucket: images/1729550000000-k3j9x2.jpg
+String storagePath(MediaKind kind, String fileName, {DateTime? now, Random? random}) {
+  final dot = fileName.lastIndexOf('.');
+  final ext = dot == -1 ? '' : fileName.substring(dot + 1).toLowerCase();
+  final safeExt = _contentTypes.containsKey(ext) ? ext : (kind == MediaKind.image ? 'jpg' : 'mp4');
+  final rand = random ?? Random.secure();
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  final suffix = List.generate(6, (_) => chars[rand.nextInt(chars.length)]).join();
+  final stamp = (now ?? DateTime.now()).millisecondsSinceEpoch;
+  return '${kind == MediaKind.image ? 'images' : 'videos'}/$stamp-$suffix.$safeExt';
 }
 
-class CloudinaryUploader implements MediaUploader {
+String contentTypeFor(String path) =>
+    _contentTypes[path.substring(path.lastIndexOf('.') + 1)] ?? 'application/octet-stream';
+
+/// الرابط العام للملف بعد الرفع.
+String publicUrl(String baseUrl, String bucket, String path) =>
+    '${baseUrl.replaceAll(RegExp(r'/+$'), '')}/storage/v1/object/public/$bucket/$path';
+
+/// يرفع لـ Supabase Storage بتوكن Firebase مال صاحب المتجر.
+/// Supabase يثق بـ Firebase (Third-party auth)، وقاعدة الـ bucket تسمح
+/// بالرفع بس لحسابات المدراء، فالزباين ما يكدرون يرفعون شي.
+class SupabaseUploader implements MediaUploader {
   final ImagePicker _picker;
   final http.Client _client;
+  final FirebaseAuth? _auth;
 
-  CloudinaryUploader({ImagePicker? picker, http.Client? client})
+  SupabaseUploader({ImagePicker? picker, http.Client? client, FirebaseAuth? auth})
       : _picker = picker ?? ImagePicker(),
-        _client = client ?? http.Client();
+        _client = client ?? http.Client(),
+        _auth = auth; // ignore: prefer_initializing_formals
 
   @override
-  bool get enabled => cloudinaryConfigured;
+  bool get enabled => supabaseConfigured;
 
   @override
   Future<String?> pickAndUpload(MediaKind kind) async {
     final XFile? file = switch (kind) {
+      // تصغير الصورة هنا، لأن تحويل الصور بـ Supabase مو بالخطة المجانية.
       MediaKind.image =>
-        await _picker.pickImage(source: ImageSource.gallery, maxWidth: 2000, imageQuality: 88),
+        await _picker.pickImage(source: ImageSource.gallery, maxWidth: 1600, imageQuality: 85),
       MediaKind.video =>
-        await _picker.pickVideo(source: ImageSource.gallery, maxDuration: const Duration(minutes: 3)),
+        await _picker.pickVideo(source: ImageSource.gallery, maxDuration: const Duration(minutes: 2)),
     };
     if (file == null) return null;
 
-    final resource = kind == MediaKind.image ? 'image' : 'video';
-    final request = http.MultipartRequest(
-      'POST',
-      Uri.https('api.cloudinary.com', '/v1_1/$cloudinaryCloudName/$resource/upload'),
-    )
-      ..fields['upload_preset'] = cloudinaryUploadPreset
-      ..files.add(await http.MultipartFile.fromPath('file', file.path));
+    // الخطة المجانية ما تقبل ملف أكبر من 50 MB.
+    if (await file.length() > 50 * 1024 * 1024) {
+      throw UploadException('الملف أكبر من 50 ميغا. اختار فيديو أقصر.');
+    }
 
+    final token = await (_auth ?? FirebaseAuth.instance).currentUser?.getIdToken();
+    if (token == null) throw UploadException('سجل دخول بحساب المدير بالأول');
+
+    final path = storagePath(kind, file.name);
     final http.Response response;
     try {
-      final streamed = await _client
-          .send(request)
+      response = await _client
+          .post(
+            Uri.parse('${supabaseUrl.replaceAll(RegExp(r'/+$'), '')}'
+                '/storage/v1/object/$supabaseBucket/$path'),
+            headers: {
+              'Authorization': 'Bearer $token',
+              'apikey': supabaseAnonKey,
+              'Content-Type': contentTypeFor(path),
+              'Cache-Control': 'max-age=31536000',
+              'x-upsert': 'false',
+            },
+            body: await file.readAsBytes(),
+          )
           .timeout(kind == MediaKind.image ? const Duration(minutes: 1) : const Duration(minutes: 6));
-      response = await http.Response.fromStream(streamed);
     } catch (_) {
       throw UploadException('ما كدرنا نرفع الملف. تأكد من الإنترنت وحاول مرة ثانية.');
     }
 
-    final body = _decode(response.body);
     if (response.statusCode != 200) {
-      final error = (body['error'] as Map?)?['message'];
-      throw UploadException('ما كدرنا نرفع الملف${error == null ? '' : ': $error'}');
+      throw UploadException(switch (response.statusCode) {
+        401 || 403 => 'هذا الحساب ما عنده صلاحية يرفع ملفات',
+        413 => 'الملف كبير هواية',
+        _ => 'ما كدرنا نرفع الملف (${_error(response.body) ?? response.statusCode})',
+      });
     }
-    final url = body['secure_url'] as String?;
-    if (url == null) throw UploadException('ما كدرنا نرفع الملف');
-    return deliveryUrl(url, kind);
+    return publicUrl(supabaseUrl, supabaseBucket, path);
   }
 
-  static Map<String, dynamic> _decode(String body) {
+  static String? _error(String body) {
     try {
-      return Map<String, dynamic>.from(jsonDecode(body) as Map);
+      final json = jsonDecode(body) as Map;
+      return (json['message'] ?? json['error']) as String?;
     } catch (_) {
-      return const {};
+      return null;
     }
   }
 }

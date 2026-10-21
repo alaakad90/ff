@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -164,14 +165,22 @@ void main() {
     expect(Category.fromMap('c', category.toMap()).toMap(), category.toMap());
   });
 
-  test('Cloudinary links get size and format transformations', () {
-    expect(
-      deliveryUrl('https://res.cloudinary.com/demo/image/upload/v1/lacasa/a.jpg', MediaKind.image),
-      'https://res.cloudinary.com/demo/image/upload/f_auto,q_auto,c_limit,w_1600/v1/lacasa/a.jpg',
+  test('Supabase upload paths, content types and public links', () {
+    final path = storagePath(
+      MediaKind.image,
+      'IMG_0001.JPEG',
+      now: DateTime.fromMillisecondsSinceEpoch(1700000000000),
+      random: Random(1),
     );
+    expect(path, matches(RegExp(r'^images/1700000000000-[a-z0-9]{6}\.jpeg$')));
+    expect(contentTypeFor(path), 'image/jpeg');
+    expect(storagePath(MediaKind.video, 'clip.MOV'), endsWith('.mov'));
+    expect(contentTypeFor('videos/x.mov'), 'video/quicktime');
+    expect(storagePath(MediaKind.video, 'noext'), endsWith('.mp4'));
+    expect(storagePath(MediaKind.image, 'x.exe'), endsWith('.jpg'));
     expect(
-      deliveryUrl('https://res.cloudinary.com/demo/video/upload/v1/lacasa/clip.mov', MediaKind.video),
-      'https://res.cloudinary.com/demo/video/upload/c_limit,w_1080,q_auto,vc_h264/v1/lacasa/clip.mp4',
+      publicUrl('https://abcd.supabase.co/', 'media', 'images/a.jpg'),
+      'https://abcd.supabase.co/storage/v1/object/public/media/images/a.jpg',
     );
   });
 
@@ -362,14 +371,14 @@ void main() {
     await tester.tap(find.text('منتج جديد'));
     await tester.pumpAndSettle();
 
-    // بدون إعداد Cloudinary ماكو زر رفع.
+    // بدون إعداد Supabase ماكو زر رفع.
     expect(find.text('اختار صورة من الموبايل'), findsNothing);
     await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
 
     uploader
       ..enabled = true
-      ..result = 'https://res.cloudinary.com/demo/image/upload/f_auto/a.jpg';
+      ..result = 'https://abcd.supabase.co/storage/v1/object/public/media/images/a.jpg';
     await tester.tap(find.text('منتج جديد'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('اختار صورة من الموبايل'));

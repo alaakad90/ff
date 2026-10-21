@@ -56,8 +56,17 @@ GitHub Actions يوقع الـ APK بمفتاح ثابت إذا هذني الـ 
 الزر ما يبين إلا لما تنحط القيم.
 
 ## الصور والفيديوهات
-خطة Spark المجانية ما بيها رفع ملفات، فالصور والفيديوهات تنحط كروابط تبدي بـ `https://`.
-للصور: [imgbb.com](https://imgbb.com) (Direct link). للفيديو: [Cloudinary](https://cloudinary.com) يعطي رابط mp4 مباشر.
+لوحة التحكم بيها زر **"اختار صورة/فيديو من الموبايل"** يرفع الملف لـ Supabase Storage
+(خطة Spark بـ Firebase ما بيها تخزين ملفات). وتبقى الخانة تقبل رابط `https://` من أي مكان.
+
+الإعداد (مرة وحدة):
+1. Supabase ← Authentication ← Third-party auth ← **Firebase**، بـ Project ID: `lacasa-store-ef68f`.
+2. Storage ← New bucket اسمه `media` و **Public**، بحد 50 MB وأنواع `image/*, video/*`.
+3. SQL Editor: الصق `supabase_storage.sql` بعد ما تبدل `ADMIN_UID`، واضغط Run.
+4. حط Project URL والمفتاح العام (anon/publishable) بـ `lib/supabase_config.dart`.
+
+الزر ما يبين إلا لما تنحط القيم. الصور تتصغر بالموبايل قبل الرفع (عرض أقصاه 1600).
+الفيديو أقصاه دقيقتين و50 MB؛ وأفضل يكون mp4، لأن فيديوهات الآيفون (HEVC) ما تشتغل على كل أجهزة الأندرويد.
 
 ## إشعار تليجرام
 التوكن ما ينكتب بالكود. ينطى وقت البناء:

@@ -46,7 +46,7 @@ class StoreApp extends StatelessWidget {
         Provider.value(value: repository),
         Provider.value(value: auth),
         Provider.value(value: notifier ?? TelegramNotifier()),
-        Provider<MediaUploader>.value(value: uploader ?? CloudinaryUploader()),
+        Provider<MediaUploader>.value(value: uploader ?? SupabaseUploader()),
         ChangeNotifierProvider(create: (_) => Cart()),
         StreamProvider<Session>(
           create: (_) => auth.watchSession(),
