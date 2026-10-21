@@ -10,6 +10,10 @@ warn() { echo "::warning::$1" >&2; echo "NOTIFY_URL="; exit 0; }
 [ -n "${CLOUDFLARE_API_TOKEN:-}" ] && [ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ] \
   || warn "CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID not set; building without order notifications"
 
+# توكن Cloudflare حروف وأرقام بس. إذا انحط شي ثاني بمكانه (مثل ملف JSON) ما نرسله.
+[[ "$CLOUDFLARE_API_TOKEN" =~ ^[A-Za-z0-9_-]{20,200}$ ]] \
+  || warn "CLOUDFLARE_API_TOKEN doesn't look like a Cloudflare API token; building without order notifications"
+
 response=$(curl -sS --max-time 20 \
   -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
   "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/subdomain") \

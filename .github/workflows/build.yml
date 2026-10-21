@@ -40,19 +40,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Check Cloudflare secrets
+      # نتأكد من شكل الأسرار قبل ما نعطيها لـ wrangler، لأن إذا انحط سر بمكان غلط
+      # رسائل الخطأ ممكن تطبع جزء منه بالسجل.
+      - name: Check server secrets
         id: check
         working-directory: .
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
         run: |
           if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
             echo "::warning::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID not set; skipping server deploy"
             echo "ready=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "ready=true" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+          python3 .github/scripts/check-server-secrets.py
+          echo "ready=true" >> "$GITHUB_OUTPUT"
       - name: Deploy server
         if: steps.check.outputs.ready == 'true'
         uses: cloudflare/wrangler-action@v3
