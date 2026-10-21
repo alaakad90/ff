@@ -19,8 +19,30 @@ def reshape_ar(text):
     return get_display(arabic_reshaper.reshape(text))
 
 # بيانات بوت تليجرام
-BOT_TOKEN = '7528010802:AAEyZkLxRbFQFdKew8x3cQ7Ci1rrOfVUciI'
-CHAT_ID = '-1002246411153'
+# تُقرأ من متغيرات البيئة TELEGRAM_BOT_TOKEN و TELEGRAM_CHAT_ID،
+# أو من ملف telegram_config.json بجانب البرنامج (غير مرفوع إلى git).
+TELEGRAM_CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "telegram_config.json")
+
+def load_telegram_config():
+    config = {}
+    if os.path.exists(TELEGRAM_CONFIG_FILE):
+        with open(TELEGRAM_CONFIG_FILE, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+
+    token = os.environ.get("TELEGRAM_BOT_TOKEN") or config.get("bot_token")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID") or config.get("chat_id")
+
+    missing = [name for name, value in (("bot token", token), ("chat id", chat_id)) if not value]
+    if missing:
+        raise RuntimeError(
+            "Missing Telegram " + " and ".join(missing) + ". "
+            "Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID environment variables, "
+            "or create " + TELEGRAM_CONFIG_FILE + ' containing {"bot_token": "...", "chat_id": "..."} '
+            "(see telegram_config.example.json)."
+        )
+    return str(token), str(chat_id)
+
+BOT_TOKEN, CHAT_ID = load_telegram_config()
 
 BOOKING_FILE = "bookings.json"
 ARABIC_FONT = 'Amiri-Regular.ttf'  # تأكد من وجود الخط بجانب ملف البرنامج
