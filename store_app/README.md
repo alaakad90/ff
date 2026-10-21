@@ -62,7 +62,7 @@ GitHub Actions يوقع الـ APK بمفتاح ثابت إذا هذني الـ 
 الإعداد (مرة وحدة):
 1. Supabase ← Authentication ← Third-party auth ← **Firebase**، بـ Project ID: `lacasa-store-ef68f`.
 2. Storage ← New bucket اسمه `media` و **Public**، بحد 50 MB وأنواع `image/*, video/*`.
-3. SQL Editor: الصق `supabase_storage.sql` بعد ما تبدل `ADMIN_UID`، واضغط Run.
+3. SQL Editor: الصق `supabase_storage.sql` (بيه رموز المدراء)، واضغط Run.
 4. حط Project URL والمفتاح العام (anon/publishable) بـ `lib/supabase_config.dart`.
 
 الزر ما يبين إلا لما تنحط القيم. الصور تتصغر بالموبايل قبل الرفع (عرض أقصاه 1600).

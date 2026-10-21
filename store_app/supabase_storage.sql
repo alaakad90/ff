@@ -1,6 +1,6 @@
 -- قواعد رفع الملفات بـ Supabase Storage لمتجر لاكاسا.
--- الصقه بـ Supabase ← SQL Editor ← New query، وبدّل ADMIN_UID برمز حسابك بـ Firebase،
--- واضغط Run.
+-- الصقه كله بـ Supabase ← SQL Editor ← New query، واضغط Run.
+-- لإضافة مدير ثاني: ضيف رمز حسابه (UID) بالقائمتين جوه، مثل ('uid1', 'uid2')، وشغله مرة ثانية.
 --
 -- الشروط قبلها:
 --   1. Authentication ← Third-party auth: Firebase (Project ID: lacasa-store-ef68f)
@@ -16,7 +16,7 @@ to anon, authenticated
 with check (
   bucket_id = 'media'
   and (auth.jwt() ->> 'iss') = 'https://securetoken.google.com/lacasa-store-ef68f'
-  and (auth.jwt() ->> 'sub') in ('ADMIN_UID')
+  and (auth.jwt() ->> 'sub') in ('AjGMY89FeOh6s1H68SdKvqIEMWG2')
 );
 
 drop policy if exists "lacasa admins delete media" on storage.objects;
@@ -26,5 +26,5 @@ to anon, authenticated
 using (
   bucket_id = 'media'
   and (auth.jwt() ->> 'iss') = 'https://securetoken.google.com/lacasa-store-ef68f'
-  and (auth.jwt() ->> 'sub') in ('ADMIN_UID')
+  and (auth.jwt() ->> 'sub') in ('AjGMY89FeOh6s1H68SdKvqIEMWG2')
 );
