@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../data/catalog.dart';
 import '../models/product.dart';
 
-/// صورة مؤقتة للمنتج لحد ما تنضاف صور حقيقية.
+/// صورة المنتج من الرابط، وإذا ماكو رابط أو ما اشتغل تبين أيقونة القسم.
 class ProductImage extends StatelessWidget {
   final Product product;
   final double iconSize;
@@ -17,15 +18,26 @@ class ProductImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final category = categoryOf(product.categoryId);
+    final placeholder = Container(
+      color: category.color.withValues(alpha: 0.18),
+      alignment: Alignment.center,
+      child: Icon(category.icon, size: iconSize, color: category.color),
+    );
+
     return Hero(
       tag: 'product-${product.id}',
-      child: Container(
-        decoration: BoxDecoration(
-          color: product.color.withValues(alpha: 0.18),
-          borderRadius: borderRadius,
-        ),
-        alignment: Alignment.center,
-        child: Icon(product.icon, size: iconSize, color: product.color),
+      child: ClipRRect(
+        borderRadius: borderRadius,
+        child: product.imageUrl.isEmpty
+            ? placeholder
+            : Image.network(
+                product.imageUrl,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => placeholder,
+                loadingBuilder: (context, child, progress) =>
+                    progress == null ? child : placeholder,
+              ),
       ),
     );
   }

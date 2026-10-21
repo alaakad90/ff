@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../models/order.dart';
 import '../models/product.dart';
 import '../services/order_service.dart';
+import '../services/store_repository.dart';
 import '../state/cart.dart';
 
 class CheckoutScreen extends StatefulWidget {
-  final OrderService? orderService;
-
-  const CheckoutScreen({super.key, this.orderService});
+  const CheckoutScreen({super.key});
 
   @override
   State<CheckoutScreen> createState() => _CheckoutScreenState();
@@ -20,7 +20,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   final _phone = TextEditingController();
   final _address = TextEditingController();
   final _notes = TextEditingController();
-  late final OrderService _orderService = widget.orderService ?? OrderService();
   bool _sending = false;
 
   @override
@@ -43,17 +42,26 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       notes: _notes.text.trim(),
     );
 
+    final repository = context.read<StoreRepository>();
+    final notifier = context.read<TelegramNotifier>();
+    var order = StoreOrder.fromCart(customer, cart);
+
     setState(() => _sending = true);
     try {
-      await _orderService.submit(customer, cart.items, cart.total);
-    } on OrderException catch (e) {
+      final id = await repository.placeOrder(order).timeout(const Duration(seconds: 20));
+      order = order.copyWith(id: id);
+    } catch (_) {
       if (!mounted) return;
       setState(() => _sending = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('ما كدرنا نرسل الطلب. تأكد من الإنترنت وحاول مرة ثانية.'),
+      ));
       return;
     }
+    notifier.notify(order);
     if (!mounted) return;
 
+    setState(() => _sending = false);
     cart.clear();
     await showDialog<void>(
       context: context,
