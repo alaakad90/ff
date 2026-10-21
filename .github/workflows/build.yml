@@ -1,35 +1,63 @@
-name: Build APK
+name: Build store app
 
 on:
   push:
-    branches: [ main ]
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: store_app
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout
-      uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.10'
+  android:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Build APK
+        run: >
+          flutter build apk --release
+          --dart-define=BOT_TOKEN=${{ secrets.BOT_TOKEN }}
+          --dart-define=CHAT_ID=${{ secrets.CHAT_ID }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lacasa-store-apk
+          path: store_app/build/app/outputs/flutter-apk/app-release.apk
 
-    - name: Install dependencies
-      run: |
-        sudo apt update
-        sudo apt install -y zip unzip openjdk-17-jdk python3-pip
-        pip install --upgrade pip
-        pip install buildozer cython
-
-    - name: Build APK
-      run: |
-        buildozer android debug
-
-    - name: Upload APK
-      uses: actions/upload-artifact@v3
-      with:
-        name: gift-booking-apk
-        path: bin/*.apk
+  ios:
+    needs: test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      # بناء بدون توقيع للتأكد إنه يشتغل. للنشر على App Store يحتاج حساب Apple Developer.
+      - name: Build iOS (no codesign)
+        run: >
+          flutter build ios --release --no-codesign
+          --dart-define=BOT_TOKEN=${{ secrets.BOT_TOKEN }}
+          --dart-define=CHAT_ID=${{ secrets.CHAT_ID }}
