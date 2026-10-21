@@ -3,9 +3,11 @@ import 'package:provider/provider.dart';
 
 import '../data/catalog.dart';
 import '../models/product.dart';
+import '../services/store_repository.dart';
 import '../state/cart.dart';
 import '../widgets/cart_button.dart';
 import '../widgets/product_image.dart';
+import 'admin/admin_gate.dart';
 import 'product_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -16,24 +18,49 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  late final Stream<List<Product>> _products =
+      context.read<StoreRepository>().watchProducts();
   String? _categoryId;
   String _query = '';
 
-  List<Product> get _visibleProducts => products
+  List<Product> _filter(List<Product> products) => products
       .where((p) => _categoryId == null || p.categoryId == _categoryId)
       .where((p) => _query.isEmpty || p.name.contains(_query))
       .toList();
 
   @override
   Widget build(BuildContext context) {
-    final visible = _visibleProducts;
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('متجر لاكاسا'),
-        actions: const [CartButton()],
+        actions: [
+          IconButton(
+            tooltip: 'لوحة التحكم',
+            icon: const Icon(Icons.admin_panel_settings_outlined),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const AdminGate()),
+            ),
+          ),
+          const CartButton(),
+        ],
       ),
-      body: CustomScrollView(
+      body: StreamBuilder<List<Product>>(
+        stream: _products,
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return const Center(child: Text('ما كدرنا نحمل المنتجات. تأكد من الإنترنت.'));
+          }
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          return _buildCatalog(_filter(snapshot.data!));
+        },
+      ),
+    );
+  }
+
+  Widget _buildCatalog(List<Product> visible) {
+    return CustomScrollView(
         slivers: [
           SliverToBoxAdapter(
             child: Padding(
@@ -63,7 +90,7 @@ class _HomeScreenState extends State<HomeScreen> {
           if (visible.isEmpty)
             const SliverFillRemaining(
               hasScrollBody: false,
-              child: Center(child: Text('ماكو منتجات تطابق البحث')),
+              child: Center(child: Text('ماكو منتجات هنا')),
             )
           else
             SliverPadding(
@@ -80,7 +107,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
         ],
-      ),
     );
   }
 

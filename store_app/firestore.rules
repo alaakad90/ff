@@ -1,0 +1,59 @@
+rules_version = '2';
+
+// قواعد حماية متجر لاكاسا.
+// انسخ هذا الملف كله والصقه بـ Firebase ← Firestore ← Rules، واضغط Publish.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // المدير: حساب عنده document بـ admins/{uid}. ينضاف يدوياً من موقع Firebase.
+    function isAdmin() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    function isText(value, minSize, maxSize) {
+      return value is string && value.size() >= minSize && value.size() <= maxSize;
+    }
+
+    function validCustomer(c) {
+      return c is map
+        && c.keys().hasOnly(['name', 'phone', 'address', 'notes'])
+        && c.keys().hasAll(['name', 'phone', 'address'])
+        && isText(c.name, 1, 100)
+        && isText(c.phone, 7, 20)
+        && isText(c.address, 1, 300)
+        && (!('notes' in c) || isText(c.notes, 0, 500));
+    }
+
+    // الزبون يكدر يسوي طلب جديد بس، بحالة "new"، وبشكل صحيح.
+    function validNewOrder(o) {
+      return o.keys().hasOnly(['customer', 'items', 'total', 'status', 'createdAt'])
+        && o.keys().hasAll(['customer', 'items', 'total', 'status', 'createdAt'])
+        && validCustomer(o.customer)
+        && o.items is list && o.items.size() >= 1 && o.items.size() <= 50
+        && o.total is int && o.total > 0 && o.total <= 100000000
+        && o.status == 'new'
+        && o.createdAt == request.time;
+    }
+
+    match /admins/{uid} {
+      // كل واحد يكدر يشوف إذا هو مدير. محد يكدر يضيف مدير من التطبيق.
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    match /products/{productId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /orders/{orderId} {
+      allow create: if validNewOrder(request.resource.data);
+      allow read, delete: if isAdmin();
+      // المدير يغير الحالة بس.
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+        && request.resource.data.status in ['new', 'confirmed', 'delivering', 'done', 'cancelled'];
+    }
+  }
+}

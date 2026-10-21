@@ -1,23 +1,42 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 
+import 'firebase_options.dart';
 import 'screens/home_screen.dart';
+import 'services/auth_service.dart';
+import 'services/order_service.dart';
+import 'services/store_repository.dart';
 import 'state/cart.dart';
 
-void main() {
-  runApp(const StoreApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  runApp(StoreApp(
+    repository: FirestoreStoreRepository(),
+    auth: FirebaseAuthService(),
+  ));
 }
 
 class StoreApp extends StatelessWidget {
-  const StoreApp({super.key});
+  final StoreRepository repository;
+  final AuthService auth;
+  final TelegramNotifier? notifier;
+
+  const StoreApp({super.key, required this.repository, required this.auth, this.notifier});
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = ColorScheme.fromSeed(seedColor: const Color(0xFF8E4A5C));
 
-    return ChangeNotifierProvider(
-      create: (_) => Cart(),
+    return MultiProvider(
+      providers: [
+        Provider.value(value: repository),
+        Provider.value(value: auth),
+        Provider.value(value: notifier ?? TelegramNotifier()),
+        ChangeNotifierProvider(create: (_) => Cart()),
+      ],
       child: MaterialApp(
         title: 'متجر لاكاسا',
         debugShowCheckedModeBanner: false,
