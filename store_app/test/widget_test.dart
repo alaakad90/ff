@@ -53,6 +53,19 @@ class FakeAuthService implements AuthService {
 
   @override
   Future<void> signOut() async => _emit(Session.guest);
+
+  @override
+  bool supportsGoogle = false;
+
+  /// null يعني الزبون سكر نافذة كوكل.
+  String? googleName = 'حسين';
+
+  @override
+  Future<bool> signInWithGoogle() async {
+    if (googleName == null) return false;
+    _emit(Session(Role.customer, uid: 'g1', email: 'g@gmail.com', name: googleName!));
+    return true;
+  }
 }
 
 class RecordingNotifier extends TelegramNotifier {
@@ -271,6 +284,34 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('ساعة خشب × 1'), findsOneWidget);
     expect(find.text('توصيل • الأحد'), findsOneWidget);
+  });
+
+  testWidgets('Google button only shows when configured and signs in', (tester) async {
+    usePhoneSize(tester);
+    final repo = InMemoryStoreRepository();
+    final auth = FakeAuthService();
+    await tester.pumpWidget(app(repo, auth: auth));
+    await tester.pumpAndSettle();
+    await tapTab(tester, 'الحساب');
+    expect(find.text('المتابعة بحساب Google'), findsNothing);
+
+    auth.supportsGoogle = true;
+    auth.googleName = null; // سكر النافذة
+    await tester.pumpWidget(app(repo, auth: auth));
+    await tester.pumpAndSettle();
+    await tapTab(tester, 'الحساب');
+    await tester.ensureVisible(find.text('المتابعة بحساب Google'));
+    await tester.tap(find.text('المتابعة بحساب Google'));
+    await tester.pumpAndSettle();
+    expect(auth.current.signedIn, isFalse);
+    expect(find.textContaining('خطأ'), findsNothing);
+
+    auth.googleName = 'حسين';
+    await tester.tap(find.text('المتابعة بحساب Google'));
+    await tester.pumpAndSettle();
+    expect(find.text('حسين'), findsOneWidget);
+    expect(find.text('طلباتي'), findsOneWidget);
+    expect(repo.profiles['g1']?.name, 'حسين');
   });
 
   testWidgets('admin login from the account tab opens the control panel', (tester) async {

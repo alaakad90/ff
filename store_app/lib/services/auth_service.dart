@@ -1,5 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+
+import '../google_sign_in_config.dart';
 
 enum Role { guest, customer, admin }
 
@@ -25,6 +29,12 @@ abstract class AuthService {
   Future<String> signUp(String name, String email, String password);
   Future<void> sendPasswordReset(String email);
   Future<void> signOut();
+
+  /// إذا false، زر كوكل ما يبين.
+  bool get supportsGoogle;
+
+  /// يرجع false إذا الزبون سكر نافذة كوكل بدون ما يختار حساب.
+  Future<bool> signInWithGoogle();
 }
 
 class AuthException implements Exception {
@@ -42,6 +52,9 @@ String authErrorMessage(String code) => switch (code) {
       'weak-password' => 'الباسورد ضعيف. خليه 6 أحرف أو أكثر.',
       'too-many-requests' => 'محاولات كثيرة. انتظر شوية وحاول مرة ثانية.',
       'network-request-failed' => 'ماكو اتصال بالإنترنت',
+      'account-exists-with-different-credential' =>
+        'هذا الإيميل عنده حساب بالباسورد. سجل دخول بالإيميل والباسورد.',
+      'user-disabled' => 'هذا الحساب موقوف',
       _ => 'صار خطأ ($code)',
     };
 
@@ -95,6 +108,40 @@ class FirebaseAuthService implements AuthService {
   Future<void> sendPasswordReset(String email) =>
       _guard(() => _auth.sendPasswordResetEmail(email: email));
 
+  Future<void>? _googleInit;
+
+  Future<void> _initGoogle() => _googleInit ??= GoogleSignIn.instance.initialize(
+        clientId: defaultTargetPlatform == TargetPlatform.iOS ? googleIosClientId : null,
+        serverClientId: googleWebClientId,
+      );
+
   @override
-  Future<void> signOut() => _auth.signOut();
+  bool get supportsGoogle => googleSignInConfigured;
+
+  @override
+  Future<bool> signInWithGoogle() async {
+    final GoogleSignInAccount account;
+    try {
+      await _initGoogle();
+      account = await GoogleSignIn.instance.authenticate();
+    } on GoogleSignInException catch (e) {
+      if (e.code == GoogleSignInExceptionCode.canceled) return false;
+      throw AuthException('ما كدرنا نكمل الدخول بكوكل (${e.code.name})');
+    }
+    final idToken = account.authentication.idToken;
+    if (idToken == null) throw AuthException('ما كدرنا نكمل الدخول بكوكل');
+    await _guard(() => _auth.signInWithCredential(GoogleAuthProvider.credential(idToken: idToken)));
+    return true;
+  }
+
+  @override
+  Future<void> signOut() async {
+    // حتى المرة الجاية يسأله أي حساب كوكل يريد.
+    if (_googleInit != null) {
+      try {
+        await GoogleSignIn.instance.signOut();
+      } catch (_) {}
+    }
+    await _auth.signOut();
+  }
 }

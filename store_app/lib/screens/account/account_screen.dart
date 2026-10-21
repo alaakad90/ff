@@ -185,6 +185,25 @@ class _AuthFormState extends State<AuthForm> {
     });
   }
 
+  void _google() {
+    final auth = context.read<AuthService>();
+    final repo = context.read<StoreRepository>();
+    _run(() async {
+      if (!await auth.signInWithGoogle()) return;
+      // نحفظ الاسم أول مرة حتى يتعبى بإكمال الطلب.
+      final session = await auth.watchSession().firstWhere((s) => s.signedIn);
+      final profile = await repo.getProfile(session.uid).catchError((_) => const UserProfile());
+      if (profile.name.isEmpty && session.name.isNotEmpty) {
+        await repo
+            .saveProfile(
+              session.uid,
+              UserProfile(name: session.name, phone: profile.phone, address: profile.address),
+            )
+            .catchError((_) {});
+      }
+    });
+  }
+
   void _resetPassword() {
     final email = _email.text.trim();
     if (!email.contains('@')) {
@@ -286,7 +305,45 @@ class _AuthFormState extends State<AuthForm> {
               onPressed: _loading ? null : _resetPassword,
               child: const Text('نسيت الباسورد؟'),
             ),
+          if (context.read<AuthService>().supportsGoogle) ...[
+            const SizedBox(height: 8),
+            Row(children: [
+              const Expanded(child: Divider()),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Text('أو', style: theme.textTheme.bodySmall),
+              ),
+              const Expanded(child: Divider()),
+            ]),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(52),
+                backgroundColor: Colors.white,
+              ),
+              onPressed: _loading ? null : _google,
+              icon: const _GoogleMark(),
+              label: const Text('المتابعة بحساب Google'),
+            ),
+          ],
         ],
+      ),
+    );
+  }
+}
+
+class _GoogleMark extends StatelessWidget {
+  const _GoogleMark();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Text(
+      'G',
+      style: TextStyle(
+        fontSize: 20,
+        fontWeight: FontWeight.w700,
+        color: Color(0xFF4285F4),
+        fontFamily: 'Roboto',
       ),
     );
   }
