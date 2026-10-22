@@ -69,6 +69,8 @@ class OrderItem {
   final int price;
   final int quantity;
   final String note; // ملاحظة الزبون على هذا المنتج
+  final String imageUrl; // صورة مرفقة ويا الملاحظة
+  final String voiceUrl; // فويس مرفق ويا الملاحظة
 
   const OrderItem({
     required this.productId,
@@ -76,7 +78,11 @@ class OrderItem {
     required this.price,
     required this.quantity,
     this.note = '',
+    this.imageUrl = '',
+    this.voiceUrl = '',
   });
+
+  bool get hasAttachments => imageUrl.isNotEmpty || voiceUrl.isNotEmpty;
 
   int get total => price * quantity;
 
@@ -86,6 +92,8 @@ class OrderItem {
         price: item.product.price,
         quantity: item.quantity,
         note: item.note,
+        imageUrl: item.imageUrl,
+        voiceUrl: item.voiceUrl,
       );
 
   factory OrderItem.fromMap(Map<String, dynamic> data) => OrderItem(
@@ -94,6 +102,8 @@ class OrderItem {
         price: (data['price'] as num?)?.toInt() ?? 0,
         quantity: (data['quantity'] as num?)?.toInt() ?? 0,
         note: data['note'] as String? ?? '',
+        imageUrl: data['imageUrl'] as String? ?? '',
+        voiceUrl: data['voiceUrl'] as String? ?? '',
       );
 
   Map<String, dynamic> toMap() => {
@@ -102,6 +112,8 @@ class OrderItem {
         'price': price,
         'quantity': quantity,
         if (note.isNotEmpty) 'note': note,
+        if (imageUrl.isNotEmpty) 'imageUrl': imageUrl,
+        if (voiceUrl.isNotEmpty) 'voiceUrl': voiceUrl,
       };
 }
 

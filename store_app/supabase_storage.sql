@@ -8,6 +8,8 @@
 --
 -- القراءة: الـ bucket عام، فالصور والفيديوهات تنفتح من الرابط بدون تسجيل.
 -- الرفع والحذف: بس لحسابات المدراء، حسب رمز الحساب (sub) بتوكن Firebase.
+-- الزبون يكدر يرفع صورة أو فويس ويا ملاحظة المنتج، بس بمجلده notes/<رمز حسابه>/،
+-- وبس صور وصوت. الزبون اللي مو مسجل ياخذ حساب مجهول (Anonymous) بـ Firebase حتى يرفع.
 
 drop policy if exists "lacasa admins upload media" on storage.objects;
 create policy "lacasa admins upload media"
@@ -17,6 +19,18 @@ with check (
   bucket_id = 'media'
   and (auth.jwt() ->> 'iss') = 'https://securetoken.google.com/lacasa-store-ef68f'
   and (auth.jwt() ->> 'sub') in ('AjGMY89FeOh6s1H68SdKvqIEMWG2')
+);
+
+drop policy if exists "lacasa customers upload order notes" on storage.objects;
+create policy "lacasa customers upload order notes"
+on storage.objects for insert
+to anon, authenticated
+with check (
+  bucket_id = 'media'
+  and (auth.jwt() ->> 'iss') = 'https://securetoken.google.com/lacasa-store-ef68f'
+  and (storage.foldername(name))[1] = 'notes'
+  and (storage.foldername(name))[2] = (auth.jwt() ->> 'sub')
+  and lower(storage.extension(name)) in ('jpg', 'jpeg', 'png', 'webp', 'heic', 'm4a', 'aac')
 );
 
 drop policy if exists "lacasa admins delete media" on storage.objects;

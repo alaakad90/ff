@@ -6,6 +6,7 @@ import '../models/product.dart';
 import '../services/contact.dart';
 import '../state/cart.dart';
 import '../widgets/cart_button.dart';
+import '../widgets/note_attachments_field.dart';
 import '../widgets/product_grid.dart';
 import '../widgets/product_image.dart';
 
@@ -21,6 +22,9 @@ class ProductScreen extends StatefulWidget {
 class _ProductScreenState extends State<ProductScreen> {
   int _quantity = 1;
   final _note = TextEditingController();
+  String _imageUrl = '';
+  String _voiceUrl = '';
+  bool _attaching = false;
 
   @override
   void dispose() {
@@ -88,6 +92,15 @@ class _ProductScreenState extends State<ProductScreen> {
                     prefixIcon: Icon(Icons.note_alt_outlined),
                   ),
                 ),
+                NoteAttachmentsField(
+                  imageUrl: _imageUrl,
+                  voiceUrl: _voiceUrl,
+                  onChanged: ({required imageUrl, required voiceUrl}) => setState(() {
+                    _imageUrl = imageUrl;
+                    _voiceUrl = voiceUrl;
+                  }),
+                  onBusy: (busy) => setState(() => _attaching = busy),
+                ),
                 if (whatsapp.isNotEmpty) ...[
                   const SizedBox(height: 8),
                   OutlinedButton.icon(
@@ -114,11 +127,13 @@ class _ProductScreenState extends State<ProductScreen> {
           child: FilledButton.icon(
             icon: const Icon(Icons.add_shopping_cart),
             label: Text('أضف للسلة • ${formatPrice(product.price * _quantity)}'),
-            onPressed: () {
-              context.read<Cart>().add(product, _quantity, _note.text);
-              Navigator.of(context).pop();
-              showAddedToCart(context, product);
-            },
+            onPressed: _attaching
+                ? null
+                : () {
+                    context.read<Cart>().add(product, _quantity, _note.text, _imageUrl, _voiceUrl);
+                    Navigator.of(context).pop();
+                    showAddedToCart(context, product);
+                  },
           ),
         ),
       ),

@@ -4,6 +4,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:lacasa_store/data/catalog.dart';
@@ -18,6 +19,7 @@ import 'package:lacasa_store/services/auth_service.dart';
 import 'package:lacasa_store/services/contact.dart';
 import 'package:lacasa_store/services/instagram.dart';
 import 'package:lacasa_store/services/media_uploader.dart';
+import 'package:lacasa_store/services/note_attachments.dart';
 import 'package:lacasa_store/services/order_service.dart';
 import 'package:lacasa_store/services/push_service.dart';
 import 'package:lacasa_store/services/store_repository.dart';
@@ -90,6 +92,31 @@ class RecordingNotifier extends OrderNotifier {
   Future<void> notifyStatus(String orderId) async => statusChanges.add(orderId);
 }
 
+class FakeAttachments implements NoteAttachments {
+  bool recording = false;
+  final bool micAllowed;
+
+  FakeAttachments({this.micAllowed = true});
+
+  @override
+  bool get enabled => true;
+
+  @override
+  Future<String?> pickImage({required bool camera}) async => 'https://cdn.example/notes/u/1-a.jpg';
+
+  @override
+  Future<bool> startRecording() async => recording = micAllowed;
+
+  @override
+  Future<String?> stopRecording() async {
+    recording = false;
+    return 'https://cdn.example/notes/u/2-b.m4a';
+  }
+
+  @override
+  Future<void> cancelRecording() async => recording = false;
+}
+
 class FakePush extends PushService {
   final String token;
   int asked = 0;
@@ -128,6 +155,7 @@ Widget app(
   OrderNotifier? notifier,
   MediaUploader? uploader,
   PushService? push,
+  NoteAttachments? attachments,
   bool showSplash = false,
 }) =>
     StoreApp(
@@ -136,6 +164,7 @@ Widget app(
       notifier: notifier ?? RecordingNotifier(),
       uploader: uploader ?? FakeUploader(),
       push: push ?? FakePush(),
+      attachments: attachments ?? FakeAttachments(),
       showSplash: showSplash,
     );
 
@@ -378,6 +407,58 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text(sample(0).name), findsOneWidget);
     expect(find.widgetWithText(AppBar, 'هدايا'), findsOneWidget);
+  });
+
+  testWidgets('customer attaches a photo and a voice note to a product', (tester) async {
+    usePhoneSize(tester);
+    final repo = InMemoryStoreRepository(products: [sample(0)], categories: sampleCategories);
+    final attachments = FakeAttachments();
+    await tester.pumpWidget(app(repo, attachments: attachments));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text(sample(0).name).first);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, 'ملاحظات على المنتج (اختياري)'), 'مثل الصورة');
+
+    await tester.ensureVisible(find.text('أرفق صورة'));
+    await tester.tap(find.text('أرفق صورة'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('اختار من الصور'));
+    await tester.pumpAndSettle();
+    expect(find.text('✓ الصورة'), findsOneWidget);
+
+    await tester.tap(find.text('سجّل فويس'));
+    await tester.pump();
+    expect(attachments.recording, isTrue);
+    await tester.pump(const Duration(seconds: 2));
+    expect(find.text('جاري التسجيل… 0:02'), findsOneWidget);
+    // زر السلة يوكف بينما يتسجل.
+    expect(tester.widget<FilledButton>(find.byType(FilledButton).last).onPressed, isNull);
+    await tester.tap(find.byTooltip('خلص'));
+    await tester.pumpAndSettle();
+    expect(find.text('✓ الفويس'), findsOneWidget);
+
+    await tester.tap(find.textContaining('أضف للسلة'));
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+    await tapTab(tester, 'السلة');
+    expect(find.text('🖼️ صورة  🎤 فويس'), findsOneWidget);
+
+    final order = StoreOrder.fromCart(
+      const Customer(name: 'x', phone: '07700000000'),
+      tester.element(find.byType(NavigationBar)).read<Cart>(),
+      deliveryDay: 'السبت',
+      pickupMethod: PickupMethod.delivery,
+    );
+    final item = OrderItem.fromMap(order.items.single.toMap());
+    expect(item.note, 'مثل الصورة');
+    expect(item.imageUrl, 'https://cdn.example/notes/u/1-a.jpg');
+    expect(item.voiceUrl, 'https://cdn.example/notes/u/2-b.m4a');
+  });
+
+  test('customer uploads go to their own folder', () {
+    final path = notePath('uid42', 'm4a', now: DateTime.fromMillisecondsSinceEpoch(1700000000000), random: Random(1));
+    expect(path, matches(RegExp(r'^notes/uid42/1700000000000-[a-z0-9]{6}\.m4a$')));
   });
 
   testWidgets('customer orders with a delivery day', (tester) async {

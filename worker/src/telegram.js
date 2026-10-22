@@ -40,6 +40,8 @@ export function buildMessage(orderId, order) {
     const price = Number(item.price) || 0;
     lines.push(`• ${item.name} × ${quantity} = ${formatPrice(price * quantity)}`);
     if (item.note) lines.push(`   📝 ${item.note}`);
+    if (item.imageUrl) lines.push(`   🖼️ صورة: ${item.imageUrl}`);
+    if (item.voiceUrl) lines.push(`   🎤 فويس: ${item.voiceUrl}`);
   }
   lines.push('');
   lines.push(`💰 المجموع: ${formatPrice(Number(order.total) || 0)}`);

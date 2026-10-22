@@ -68,7 +68,8 @@ class FirebaseAuthService implements AuthService {
 
   @override
   Stream<Session> watchSession() => _auth.userChanges().asyncMap((user) async {
-        if (user == null) return Session.guest;
+        // الحساب المجهول (للرفع بس) يبقى زائر.
+        if (user == null || user.isAnonymous) return Session.guest;
         var isAdmin = false;
         try {
           isAdmin = (await _db.collection('admins').doc(user.uid).get()).exists;
