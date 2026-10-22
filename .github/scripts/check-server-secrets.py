@@ -12,8 +12,18 @@ errors = []
 
 token = os.environ.get("CLOUDFLARE_API_TOKEN", "")
 if not re.fullmatch(r"[A-Za-z0-9_\-]{20,200}", token):
-    hint = " (it looks like JSON; is the Firebase key file in the wrong secret?)" if "{" in token else ""
-    errors.append("CLOUDFLARE_API_TOKEN is not a Cloudflare API token" + hint)
+    # نوصف شكل القيمة بس، بدون ما نطبعها.
+    if "{" in token:
+        hint = "it looks like JSON; is the Firebase key file in the wrong secret?"
+    elif "curl" in token or "Bearer" in token:
+        hint = "it looks like the curl test command; paste only the token itself"
+    elif token != token.strip():
+        hint = "it has spaces or new lines before or after it"
+    elif re.search(r"\s", token):
+        hint = "it has spaces or new lines inside it"
+    else:
+        hint = f"{len(token)} chars, with characters a token doesn't have"
+    errors.append(f"CLOUDFLARE_API_TOKEN is not a Cloudflare API token ({hint})")
 
 account = os.environ.get("CLOUDFLARE_ACCOUNT_ID", "")
 if not re.fullmatch(r"[0-9a-f]{32}", account.strip()):
