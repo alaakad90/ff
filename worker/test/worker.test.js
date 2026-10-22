@@ -3,7 +3,7 @@ import { beforeEach, describe, it } from 'node:test';
 
 import { decodeFields } from '../src/firestore.js';
 import { clearTokenCache, signJwt } from '../src/google.js';
-import worker, { MAX_ORDER_AGE_MS } from '../src/index.js';
+import worker, { MAX_ORDER_AGE_MS, parseServiceAccount } from '../src/index.js';
 import { buildMessage, formatBaghdadTime, formatPrice } from '../src/telegram.js';
 
 const PROJECT = 'demo-lacasa';
@@ -224,5 +224,14 @@ describe('POST /notify-order', () => {
     assert.equal((await callWorker(null, env, backend, { method: 'GET', path: '/' })).status, 200);
     assert.equal((await callWorker({ orderId: 'abc' }, {}, backend)).status, 500);
     assert.equal(backend.calls.telegram.length, 0);
+  });
+});
+
+describe('parseServiceAccount', () => {
+  it('accepts the key file with a BOM or without its outer braces', () => {
+    const key = { type: 'service_account', project_id: 'p' };
+    const text = JSON.stringify(key, null, 2);
+    assert.deepEqual(parseServiceAccount(`\uFEFF${text}\n`), key);
+    assert.deepEqual(parseServiceAccount(text.slice(1, -1)), key);
   });
 });

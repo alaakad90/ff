@@ -20,8 +20,15 @@ const json = (status, body) =>
     headers: { 'Content-Type': 'application/json; charset=utf-8' },
   });
 
+/** يقبل ملف المفتاح حتى لو انلصق بدون { و } أو ويا BOM. */
+export function parseServiceAccount(raw) {
+  let text = raw.replace(/^\uFEFF/, '').trim();
+  if (text.startsWith('"')) text = `{${text.replace(/,$/, '')}}`;
+  return JSON.parse(text);
+}
+
 export async function notifyOrder(orderId, env, { fetchImpl = fetch, now = new Date(Date.now()) } = {}) {
-  const serviceAccount = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT.replace(/^\uFEFF/, '').trim());
+  const serviceAccount = parseServiceAccount(env.FIREBASE_SERVICE_ACCOUNT);
   const projectId = serviceAccount.project_id;
   const token = await getAccessToken(serviceAccount, fetchImpl, now.getTime());
 

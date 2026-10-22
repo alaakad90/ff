@@ -20,6 +20,9 @@ if not re.fullmatch(r"[0-9a-f]{32}", account.strip()):
 
 # Notepad بالويندوز أحياناً يضيف BOM بأول الملف، فنشيله.
 raw = os.environ.get("FIREBASE_SERVICE_ACCOUNT", "").lstrip("\ufeff").strip()
+# إذا انلصق المحتوى بدون { و } (يبدي بـ "type": ...)، نرجعهن. نفس الشي بالسيرفر.
+if raw.startswith('"'):
+    raw = "{" + raw.rstrip(",") + "}"
 try:
     sa = json.loads(raw)
     if sa.get("type") != "service_account" or "private_key" not in sa or "client_email" not in sa:
