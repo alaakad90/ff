@@ -29,7 +29,7 @@ service cloud.firestore {
     // إذا الطلب مربوط بحساب، لازم يكون حسابه هو.
     function validNewOrder(o) {
       return o.keys().hasOnly(['customer', 'items', 'total', 'status', 'createdAt',
-                               'deliveryDay', 'pickupMethod', 'userId'])
+                               'deliveryDay', 'pickupMethod', 'userId', 'pushToken'])
         && o.keys().hasAll(['customer', 'items', 'total', 'status', 'createdAt',
                             'deliveryDay', 'pickupMethod'])
         && validCustomer(o.customer)
@@ -39,7 +39,9 @@ service cloud.firestore {
         && o.createdAt == request.time
         && o.deliveryDay in ['السبت', 'الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة']
         && o.pickupMethod in ['delivery', 'pickup']
-        && (!('userId' in o) || (request.auth != null && o.userId == request.auth.uid));
+        && (!('userId' in o) || (request.auth != null && o.userId == request.auth.uid))
+        // توكن تليفون الزبون حتى السيرفر يرسله إشعار بحالة الطلب.
+        && (!('pushToken' in o) || isText(o.pushToken, 1, 4096));
     }
 
     function validProfile(p) {

@@ -17,6 +17,7 @@ import 'package:lacasa_store/services/contact.dart';
 import 'package:lacasa_store/services/instagram.dart';
 import 'package:lacasa_store/services/media_uploader.dart';
 import 'package:lacasa_store/services/order_service.dart';
+import 'package:lacasa_store/services/push_service.dart';
 import 'package:lacasa_store/services/store_repository.dart';
 import 'package:lacasa_store/state/cart.dart';
 
@@ -76,9 +77,26 @@ class FakeAuthService implements AuthService {
 
 class RecordingNotifier extends OrderNotifier {
   final sent = <StoreOrder>[];
+  final statusChanges = <String>[];
 
   @override
   Future<void> notify(StoreOrder order) async => sent.add(order);
+
+  @override
+  Future<void> notifyStatus(String orderId) async => statusChanges.add(orderId);
+}
+
+class FakePush extends PushService {
+  final String token;
+  int asked = 0;
+
+  FakePush([this.token = '']);
+
+  @override
+  Future<String> deviceToken() async {
+    asked++;
+    return token;
+  }
 }
 
 class FakeUploader implements MediaUploader {
@@ -105,6 +123,7 @@ Widget app(
   AuthService? auth,
   OrderNotifier? notifier,
   MediaUploader? uploader,
+  PushService? push,
   bool showSplash = false,
 }) =>
     StoreApp(
@@ -112,6 +131,7 @@ Widget app(
       auth: auth ?? FakeAuthService(),
       notifier: notifier ?? RecordingNotifier(),
       uploader: uploader ?? FakeUploader(),
+      push: push ?? FakePush(),
       showSplash: showSplash,
     );
 
@@ -245,6 +265,11 @@ void main() {
     await OrderNotifier(client: client, endpoint: 'https://srv.example/x').notify(order.copyWith(id: ''));
     expect(requests, hasLength(1));
 
+    // تغيير الحالة يروح لـ /notify-status بنفس السيرفر.
+    await OrderNotifier(client: client, endpoint: 'https://srv.example/notify-order').notifyStatus('o42');
+    expect(requests.last.url.toString(), 'https://srv.example/notify-status');
+    expect(jsonDecode(requests.last.body), {'orderId': 'o42'});
+
     // فشل السيرفر ما يوكف الطلب.
     final failing = MockClient((_) async => throw Exception('offline'));
     await OrderNotifier(client: failing, endpoint: 'https://srv.example/x').notify(order);
@@ -299,7 +324,8 @@ void main() {
     usePhoneSize(tester);
     final repo = InMemoryStoreRepository(products: [sample(0), sample(2)], categories: sampleCategories);
     final notifier = RecordingNotifier();
-    await tester.pumpWidget(app(repo, notifier: notifier));
+    final push = FakePush('phone-token-1');
+    await tester.pumpWidget(app(repo, notifier: notifier, push: push));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byTooltip('أضف للسلة').first);
@@ -334,6 +360,8 @@ void main() {
     expect(order.customer.address, 'بغداد، الكرادة');
     expect(order.userId, isEmpty);
     expect(notifier.sent.single.id, order.id);
+    expect(push.asked, 1);
+    expect(order.pushToken, 'phone-token-1');
   });
 
   testWidgets('customer signs up and sees their orders', (tester) async {
@@ -454,7 +482,8 @@ void main() {
       deliveryDay: 'السبت',
     ));
     final auth = FakeAuthService(adminEmails: {'owner@example.com'});
-    await tester.pumpWidget(app(repo, auth: auth));
+    final notifier = RecordingNotifier();
+    await tester.pumpWidget(app(repo, auth: auth, notifier: notifier));
     await tester.pumpAndSettle();
     await tapTab(tester, 'الحساب');
 
@@ -479,6 +508,8 @@ void main() {
     await tester.tap(find.text(OrderStatus.delivering.label).last);
     await tester.pumpAndSettle();
     expect(repo.orders.single.status, OrderStatus.delivering);
+    // الزبون ينبعثله إشعار بالحالة الجديدة.
+    expect(notifier.statusChanges, [repo.orders.single.id]);
 
     // الأقسام القديمة تنضاف بضغطة.
     await tester.tap(find.widgetWithText(Tab, 'الأقسام'));

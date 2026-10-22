@@ -115,6 +115,7 @@ class StoreOrder {
   final String userId; // فارغ إذا الزبون ما مسجل دخول
   final OrderStatus status;
   final DateTime? createdAt;
+  final String pushToken; // توكن تليفون الزبون للإشعارات (ينكتب بس، ما ينقرا)
 
   const StoreOrder({
     this.id = '',
@@ -126,6 +127,7 @@ class StoreOrder {
     this.userId = '',
     this.status = OrderStatus.pending,
     this.createdAt,
+    this.pushToken = '',
   });
 
   factory StoreOrder.fromCart(
@@ -134,6 +136,7 @@ class StoreOrder {
     required String deliveryDay,
     required PickupMethod pickupMethod,
     String userId = '',
+    String pushToken = '',
   }) =>
       StoreOrder(
         customer: customer,
@@ -142,6 +145,20 @@ class StoreOrder {
         deliveryDay: deliveryDay,
         pickupMethod: pickupMethod,
         userId: userId,
+        pushToken: pushToken,
+      );
+
+  StoreOrder copyWithPushToken(String token) => StoreOrder(
+        id: id,
+        customer: customer,
+        items: items,
+        total: total,
+        deliveryDay: deliveryDay,
+        pickupMethod: pickupMethod,
+        userId: userId,
+        status: status,
+        createdAt: createdAt,
+        pushToken: token,
       );
 
   StoreOrder copyWith({String? id, OrderStatus? status, DateTime? createdAt}) => StoreOrder(
@@ -154,5 +171,6 @@ class StoreOrder {
         userId: userId,
         status: status ?? this.status,
         createdAt: createdAt ?? this.createdAt,
+        pushToken: pushToken,
       );
 }

@@ -22,14 +22,20 @@ class OrderNotifier {
         endpoint = endpoint ?? _endpoint;
 
   /// ما يرمي أخطاء: الطلب محفوظ أصلاً، والإشعار إضافة.
-  Future<void> notify(StoreOrder order) async {
-    if (endpoint.isEmpty || order.id.isEmpty) return;
+  Future<void> notify(StoreOrder order) => _post(endpoint, order.id);
+
+  /// بعد ما المدير يغير حالة الطلب: السيرفر يرسل إشعار لتليفون الزبون.
+  Future<void> notifyStatus(String orderId) =>
+      _post(endpoint.replaceFirst(RegExp(r'/notify-order$'), '/notify-status'), orderId);
+
+  Future<void> _post(String url, String orderId) async {
+    if (url.isEmpty || orderId.isEmpty) return;
     try {
       await _client
           .post(
-            Uri.parse(endpoint),
+            Uri.parse(url),
             headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({'orderId': order.id}),
+            body: jsonEncode({'orderId': orderId}),
           )
           .timeout(const Duration(seconds: 15));
     } catch (_) {

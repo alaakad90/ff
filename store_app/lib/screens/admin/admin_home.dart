@@ -8,6 +8,7 @@ import '../../models/order.dart';
 import '../../models/product.dart';
 import '../../services/auth_service.dart';
 import '../../services/contact.dart';
+import '../../services/order_service.dart';
 import '../../services/store_repository.dart';
 import '../../widgets/product_grid.dart';
 import '../../widgets/product_image.dart';
@@ -264,7 +265,9 @@ class _OrderCard extends StatelessWidget {
             onChanged: (status) async {
               if (status == null || status == order.status) return;
               try {
+                final notifier = context.read<OrderNotifier>();
                 await context.read<StoreRepository>().setOrderStatus(order.id, status);
+                notifier.notifyStatus(order.id);
               } catch (_) {
                 if (context.mounted) _showError(context, 'ما كدرنا نغير الحالة');
               }

@@ -143,7 +143,7 @@ class FirestoreStoreRepository implements StoreRepository {
 
   @override
   Future<String> placeOrder(StoreOrder order) async {
-    final doc = await _col('orders').add({
+    final data = {
       'customer': order.customer.toMap(),
       'items': order.items.map((i) => i.toMap()).toList(),
       'total': order.total,
@@ -152,8 +152,19 @@ class FirestoreStoreRepository implements StoreRepository {
       if (order.userId.isNotEmpty) 'userId': order.userId,
       'status': OrderStatus.pending.value,
       'createdAt': FieldValue.serverTimestamp(),
-    });
-    return doc.id;
+    };
+    try {
+      final doc = await _col('orders').add({
+        ...data,
+        if (order.pushToken.isNotEmpty) 'pushToken': order.pushToken,
+      });
+      return doc.id;
+    } on FirebaseException catch (e) {
+      // إذا قواعد Firestore بعدها القديمة (ما تعرف pushToken)، الطلب يوصل بدون إشعارات.
+      if (e.code != 'permission-denied' || order.pushToken.isEmpty) rethrow;
+      final doc = await _col('orders').add(data);
+      return doc.id;
+    }
   }
 
   @override
