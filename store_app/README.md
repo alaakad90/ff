@@ -56,17 +56,37 @@ GitHub Actions يوقع الـ APK بمفتاح ثابت إذا هذني الـ 
 الزر ما يبين إلا لما تنحط القيم.
 
 ## الصور والفيديوهات
-خطة Spark المجانية ما بيها رفع ملفات، فالصور والفيديوهات تنحط كروابط تبدي بـ `https://`.
-للصور: [imgbb.com](https://imgbb.com) (Direct link). للفيديو: [Cloudinary](https://cloudinary.com) يعطي رابط mp4 مباشر.
+لوحة التحكم بيها زر **"اختار صورة/فيديو من الموبايل"** يرفع الملف لـ Supabase Storage
+(خطة Spark بـ Firebase ما بيها تخزين ملفات). وتبقى الخانة تقبل رابط `https://` من أي مكان.
 
-## إشعار تليجرام
-التوكن ما ينكتب بالكود. ينطى وقت البناء:
+الإعداد (مرة وحدة):
+1. Supabase ← Authentication ← Third-party auth ← **Firebase**، بـ Project ID: `lacasa-store-ef68f`.
+2. Storage ← New bucket اسمه `media` و **Public**، بحد 50 MB وأنواع `image/*, video/*`.
+3. SQL Editor: الصق `supabase_storage.sql` (بيه رموز المدراء)، واضغط Run.
+4. حط Project URL والمفتاح العام (anon/publishable) بـ `lib/supabase_config.dart`.
 
-```bash
-flutter run --dart-define=BOT_TOKEN=xxxx --dart-define=CHAT_ID=-100xxxx
-```
+الزر ما يبين إلا لما تنحط القيم. الصور تتصغر بالموبايل قبل الرفع (عرض أقصاه 1600).
+الفيديو أقصاه دقيقتين و50 MB؛ وأفضل يكون mp4، لأن فيديوهات الآيفون (HEVC) ما تشتغل على كل أجهزة الأندرويد.
 
-بـ GitHub: Settings ← Secrets and variables ← Actions، وضيف `BOT_TOKEN` و `CHAT_ID`.
+## إشعار تليجرام (السيرفر)
+الإشعار يندز من سيرفر صغير على Cloudflare Workers (مجلد `worker/` بأول المستودع)، مو من التطبيق،
+فتوكن البوت ما يكون داخل الـ APK:
+
+1. التطبيق يحفظ الطلب بـ Firestore، وبعدها يدز رقمه لـ `POST /notify-order`.
+2. السيرفر يقرا الطلب بمفتاح خدمة Firebase، ويتأكد إنه جديد (أقل من ساعة) وما انبعث قبل.
+3. يحط `notifiedAt` على الطلب بشرط ما تغير (حتى ما تنبعث الرسالة مرتين)، ويدز للتليجرام.
+
+GitHub Secrets المطلوبة:
+
+| Secret | شنو |
+|---|---|
+| `CLOUDFLARE_API_TOKEN` | توكن بقالب "Edit Cloudflare Workers" |
+| `CLOUDFLARE_ACCOUNT_ID` | رقم حساب Cloudflare |
+| `FIREBASE_SERVICE_ACCOUNT` | محتوى ملف مفتاح الخدمة (JSON) من Firebase ← Service accounts |
+| `BOT_TOKEN` و `CHAT_ID` | البوت والمجموعة |
+
+السيرفر ينشر أوتوماتيكياً مع كل دمج بـ `master` (أو من زر Run workflow)، والتطبيق ياخذ رابطه
+(`https://lacasa-store.<subdomain>.workers.dev/notify-order`) وقت البناء. اختبارات السيرفر: `cd worker && npm test`.
 
 ## الأيقونة
 الأيقونة تنولد من `assets/icon/`:

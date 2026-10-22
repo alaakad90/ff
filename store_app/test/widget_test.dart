@@ -1,7 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:lacasa_store/data/catalog.dart';
 import 'package:lacasa_store/main.dart';
 import 'package:lacasa_store/models/content.dart';
@@ -10,6 +14,7 @@ import 'package:lacasa_store/models/product.dart';
 import 'package:lacasa_store/screens/search_screen.dart';
 import 'package:lacasa_store/services/auth_service.dart';
 import 'package:lacasa_store/services/contact.dart';
+import 'package:lacasa_store/services/media_uploader.dart';
 import 'package:lacasa_store/services/order_service.dart';
 import 'package:lacasa_store/services/store_repository.dart';
 import 'package:lacasa_store/state/cart.dart';
@@ -68,11 +73,28 @@ class FakeAuthService implements AuthService {
   }
 }
 
-class RecordingNotifier extends TelegramNotifier {
+class RecordingNotifier extends OrderNotifier {
   final sent = <StoreOrder>[];
 
   @override
   Future<void> notify(StoreOrder order) async => sent.add(order);
+}
+
+class FakeUploader implements MediaUploader {
+  @override
+  bool enabled;
+
+  /// الرابط اللي يرجعه، أو null كأن صاحب المتجر سكر المعرض.
+  String? result;
+  final picked = <MediaKind>[];
+
+  FakeUploader({this.enabled = false, this.result});
+
+  @override
+  Future<String?> pickAndUpload(MediaKind kind) async {
+    picked.add(kind);
+    return result;
+  }
 }
 
 Product sample(int i) => sampleProducts[i];
@@ -80,13 +102,15 @@ Product sample(int i) => sampleProducts[i];
 Widget app(
   StoreRepository repo, {
   AuthService? auth,
-  TelegramNotifier? notifier,
+  OrderNotifier? notifier,
+  MediaUploader? uploader,
   bool showSplash = false,
 }) =>
     StoreApp(
       repository: repo,
       auth: auth ?? FakeAuthService(),
       notifier: notifier ?? RecordingNotifier(),
+      uploader: uploader ?? FakeUploader(),
       showSplash: showSplash,
     );
 
@@ -144,26 +168,55 @@ void main() {
     expect(Category.fromMap('c', category.toMap()).toMap(), category.toMap());
   });
 
+  test('Supabase upload paths, content types and public links', () {
+    final path = storagePath(
+      MediaKind.image,
+      'IMG_0001.JPEG',
+      now: DateTime.fromMillisecondsSinceEpoch(1700000000000),
+      random: Random(1),
+    );
+    expect(path, matches(RegExp(r'^images/1700000000000-[a-z0-9]{6}\.jpeg$')));
+    expect(contentTypeFor(path), 'image/jpeg');
+    expect(storagePath(MediaKind.video, 'clip.MOV'), endsWith('.mov'));
+    expect(contentTypeFor('videos/x.mov'), 'video/quicktime');
+    expect(storagePath(MediaKind.video, 'noext'), endsWith('.mp4'));
+    expect(storagePath(MediaKind.image, 'x.exe'), endsWith('.jpg'));
+    expect(
+      publicUrl('https://abcd.supabase.co/', 'media', 'images/a.jpg'),
+      'https://abcd.supabase.co/storage/v1/object/public/media/images/a.jpg',
+    );
+  });
+
   test('search matches name and description', () {
     expect(matchesQuery(sample(0), 'بوكس'), isTrue);
     expect(matchesQuery(sample(0), 'شموع'), isTrue);
     expect(matchesQuery(sample(0), 'عطر'), isFalse);
   });
 
-  test('telegram message has order day, delivery day and pickup method', () {
-    final cart = Cart()..add(sample(2).copyWith(id: 'c'), 2);
-    final order = StoreOrder.fromCart(
-      const Customer(name: 'علي', phone: '07701234567', address: 'بغداد'),
-      cart,
-      deliveryDay: 'الخميس',
-      pickupMethod: PickupMethod.pickup,
-    ).copyWith(id: 'o42');
-    final message = TelegramNotifier.buildMessage(order, now: DateTime(2026, 10, 24, 9, 5));
-    expect(message, contains('وقت الطلب: السبت 2026/10/24 09:05'));
-    expect(message, contains('يوم التسليم: الخميس'));
-    expect(message, contains('طريقة الاستلام: استلام من المحل'));
-    expect(message, contains('${sample(2).name} × 2'));
-    expect(message, contains('o42'));
+  test('order notifier posts only the order id to the server', () async {
+    final requests = <http.Request>[];
+    final client = MockClient((request) async {
+      requests.add(request);
+      return http.Response('{"ok":true}', 200);
+    });
+    const order = StoreOrder(
+      id: 'o42',
+      customer: Customer(name: 'علي', phone: '07701234567'),
+      items: [],
+      total: 1,
+    );
+    await OrderNotifier(client: client, endpoint: 'https://srv.example/notify-order').notify(order);
+    expect(requests.single.url.toString(), 'https://srv.example/notify-order');
+    expect(jsonDecode(requests.single.body), {'orderId': 'o42'});
+
+    // بدون رابط، أو بدون رقم طلب، ما يدز شي.
+    await OrderNotifier(client: client, endpoint: '').notify(order);
+    await OrderNotifier(client: client, endpoint: 'https://srv.example/x').notify(order.copyWith(id: ''));
+    expect(requests, hasLength(1));
+
+    // فشل السيرفر ما يوكف الطلب.
+    final failing = MockClient((_) async => throw Exception('offline'));
+    await OrderNotifier(client: failing, endpoint: 'https://srv.example/x').notify(order);
   });
 
   test('user orders only include that user', () async {
@@ -312,6 +365,52 @@ void main() {
     expect(find.text('حسين'), findsOneWidget);
     expect(find.text('طلباتي'), findsOneWidget);
     expect(repo.profiles['g1']?.name, 'حسين');
+  });
+
+  testWidgets('admin uploads a product photo from the phone', (tester) async {
+    usePhoneSize(tester);
+    final repo = InMemoryStoreRepository(categories: sampleCategories);
+    final auth = FakeAuthService(adminEmails: {'owner@example.com'});
+    final uploader = FakeUploader();
+    await tester.pumpWidget(app(repo, auth: auth, uploader: uploader));
+    await tester.pumpAndSettle();
+    await tapTab(tester, 'الحساب');
+    await tester.enterText(find.byType(TextFormField).at(0), 'owner@example.com');
+    await tester.enterText(find.byType(TextFormField).at(1), 'secret');
+    await tester.tap(find.widgetWithText(FilledButton, 'دخول'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(Tab, 'المنتجات'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('منتج جديد'));
+    await tester.pumpAndSettle();
+
+    // بدون إعداد Supabase ماكو زر رفع.
+    expect(find.text('اختار صورة من الموبايل'), findsNothing);
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+
+    uploader
+      ..enabled = true
+      ..result = 'https://abcd.supabase.co/storage/v1/object/public/media/images/a.jpg';
+    await tester.tap(find.text('منتج جديد'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('اختار صورة من الموبايل'));
+    await tester.tap(find.text('اختار صورة من الموبايل'));
+    await tester.pumpAndSettle();
+    expect(uploader.picked, [MediaKind.image]);
+
+    await tester.enterText(find.widgetWithText(TextFormField, 'اسم المنتج'), 'ساعة خشب');
+    await tester.enterText(find.widgetWithText(TextFormField, 'السعر'), '30000');
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('هدايا').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('حفظ'));
+    await tester.pumpAndSettle();
+
+    final saved = (await repo.watchProducts().first).single;
+    expect(saved.name, 'ساعة خشب');
+    expect(saved.imageUrl, uploader.result);
   });
 
   testWidgets('admin login from the account tab opens the control panel', (tester) async {
