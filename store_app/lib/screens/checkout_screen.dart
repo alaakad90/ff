@@ -6,6 +6,7 @@ import '../models/order.dart';
 import '../models/product.dart';
 import '../services/auth_service.dart';
 import '../services/order_service.dart';
+import '../services/push_service.dart';
 import '../services/store_repository.dart';
 import '../state/cart.dart';
 
@@ -70,6 +71,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     final session = context.read<Session>();
     final repository = context.read<StoreRepository>();
     final notifier = context.read<OrderNotifier>();
+    final push = context.read<PushService>();
     final customer = Customer(
       name: _name.text.trim(),
       phone: _phone.text.trim(),
@@ -85,6 +87,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     );
 
     setState(() => _sending = true);
+    // نطلب إذن الإشعارات هنا حتى نبلغ الزبون بحالة طلبه.
+    order = order.copyWithPushToken(await push.deviceToken());
     try {
       final id = await repository.placeOrder(order).timeout(const Duration(seconds: 20));
       order = order.copyWith(id: id);
@@ -250,7 +254,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                         padding: const EdgeInsets.symmetric(vertical: 2),
                         child: Row(
                           children: [
-                            Expanded(child: Text('${item.product.name} × ${item.quantity}')),
+                            Expanded(child: Text('${item.product.name} × ${item.quantity}${item.note.isEmpty ? '' : '\n📝 ${item.note}'}')),
                             Text(formatPrice(item.total)),
                           ],
                         ),

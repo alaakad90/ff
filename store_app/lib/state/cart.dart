@@ -4,9 +4,15 @@ import '../models/product.dart';
 
 class CartItem {
   final Product product;
+  final String note; // ملاحظة الزبون على هذا المنتج (اختياري)
   int quantity;
 
-  CartItem(this.product, this.quantity);
+  CartItem(this.product, this.quantity, {this.note = ''});
+
+  /// نفس المنتج بملاحظتين مختلفتين يكونن سطرين بالسلة.
+  String get key => itemKey(product, note);
+
+  static String itemKey(Product product, String note) => '${product.id}\n$note';
 
   int get total => product.price * quantity;
 }
@@ -22,31 +28,42 @@ class Cart extends ChangeNotifier {
 
   bool get isEmpty => _items.isEmpty;
 
-  int quantityOf(Product product) => _items[product.id]?.quantity ?? 0;
+  /// الكمية بالسلة من هذا المنتج، بكل الملاحظات.
+  int quantityOf(Product product) =>
+      _items.values.where((item) => item.product.id == product.id).fold(0, (sum, item) => sum + item.quantity);
 
-  void add(Product product, [int quantity = 1]) {
-    final item = _items[product.id];
+  void add(Product product, [int quantity = 1, String note = '']) {
+    note = note.trim();
+    final key = CartItem.itemKey(product, note);
+    final item = _items[key];
     if (item == null) {
-      _items[product.id] = CartItem(product, quantity);
+      _items[key] = CartItem(product, quantity, note: note);
     } else {
       item.quantity += quantity;
     }
     notifyListeners();
   }
 
-  void decrement(Product product) {
-    final item = _items[product.id];
-    if (item == null) return;
-    if (item.quantity <= 1) {
-      _items.remove(product.id);
+  void increment(CartItem item) {
+    final existing = _items[item.key];
+    if (existing == null) return;
+    existing.quantity++;
+    notifyListeners();
+  }
+
+  void decrement(CartItem item) {
+    final existing = _items[item.key];
+    if (existing == null) return;
+    if (existing.quantity <= 1) {
+      _items.remove(item.key);
     } else {
-      item.quantity--;
+      existing.quantity--;
     }
     notifyListeners();
   }
 
-  void remove(Product product) {
-    _items.remove(product.id);
+  void remove(CartItem item) {
+    _items.remove(item.key);
     notifyListeners();
   }
 

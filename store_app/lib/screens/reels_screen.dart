@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
 import '../models/content.dart';
 import '../models/product.dart';
+import '../services/contact.dart';
+import '../services/instagram.dart';
 import '../services/store_repository.dart';
 import '../widgets/product_grid.dart';
 import 'product_screen.dart';
@@ -92,7 +95,11 @@ class _ReelPageState extends State<_ReelPage> {
     _init();
   }
 
+  /// رابط العرض المضمّن إذا الفيديو ريل من إنستغرام.
+  late final String? _instagram = instagramEmbedUrl(widget.reel.videoUrl);
+
   Future<void> _init() async {
+    if (_instagram != null) return;
     final uri = Uri.tryParse(widget.reel.videoUrl);
     if (uri == null || !uri.hasScheme) {
       setState(() => _failed = true);
@@ -152,7 +159,12 @@ class _ReelPageState extends State<_ReelPage> {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          if (ready)
+          if (_instagram != null)
+            // ينبني بس للفيديو الظاهر، فمن يسحب الزبون للفيديو الجاي يوكف.
+            widget.playing
+                ? _InstagramEmbed(url: _instagram)
+                : const Center(child: Icon(Icons.play_circle_outline, size: 72, color: Colors.white54))
+          else if (ready)
             FittedBox(
               fit: BoxFit.cover,
               child: SizedBox(
@@ -169,12 +181,14 @@ class _ReelPageState extends State<_ReelPage> {
             const Center(child: CircularProgressIndicator(color: Colors.white)),
           if (ready && _pausedByUser)
             const Center(child: Icon(Icons.play_arrow_rounded, size: 84, color: Colors.white70)),
-          const DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.bottomCenter,
-                end: Alignment.center,
-                colors: [Colors.black87, Colors.transparent],
+          const IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.center,
+                  colors: [Colors.black87, Colors.transparent],
+                ),
               ),
             ),
           ),
@@ -219,4 +233,40 @@ class _ReelPageState extends State<_ReelPage> {
       ),
     );
   }
+}
+
+/// ريل إنستغرام معروض داخل التطبيق. الزبون يدوس عليه حتى يشتغل.
+class _InstagramEmbed extends StatefulWidget {
+  final String url;
+
+  const _InstagramEmbed({required this.url});
+
+  @override
+  State<_InstagramEmbed> createState() => _InstagramEmbedState();
+}
+
+class _InstagramEmbedState extends State<_InstagramEmbed> {
+  late final WebViewController _controller = WebViewController()
+    ..setJavaScriptMode(JavaScriptMode.unrestricted)
+    ..setBackgroundColor(Colors.black)
+    ..setNavigationDelegate(NavigationDelegate(
+      // الروابط اللي تطلع برا الريل (مثل "شوف على إنستغرام") تنفتح بتطبيق إنستغرام.
+      onNavigationRequest: (request) {
+        if (!request.isMainFrame || request.url.contains('/embed')) {
+          return NavigationDecision.navigate;
+        }
+        if (request.url.startsWith('https://')) openLink(request.url);
+        return NavigationDecision.prevent;
+      },
+    ))
+    ..loadRequest(Uri.parse(widget.url));
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+        child: Padding(
+          // نخلي مكان للوصف وزر المنتج جوة.
+          padding: const EdgeInsets.only(bottom: 120),
+          child: WebViewWidget(controller: _controller),
+        ),
+      );
 }

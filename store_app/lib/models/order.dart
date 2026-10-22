@@ -68,12 +68,14 @@ class OrderItem {
   final String name;
   final int price;
   final int quantity;
+  final String note; // ملاحظة الزبون على هذا المنتج
 
   const OrderItem({
     required this.productId,
     required this.name,
     required this.price,
     required this.quantity,
+    this.note = '',
   });
 
   int get total => price * quantity;
@@ -83,6 +85,7 @@ class OrderItem {
         name: item.product.name,
         price: item.product.price,
         quantity: item.quantity,
+        note: item.note,
       );
 
   factory OrderItem.fromMap(Map<String, dynamic> data) => OrderItem(
@@ -90,6 +93,7 @@ class OrderItem {
         name: data['name'] as String? ?? '',
         price: (data['price'] as num?)?.toInt() ?? 0,
         quantity: (data['quantity'] as num?)?.toInt() ?? 0,
+        note: data['note'] as String? ?? '',
       );
 
   Map<String, dynamic> toMap() => {
@@ -97,6 +101,7 @@ class OrderItem {
         'name': name,
         'price': price,
         'quantity': quantity,
+        if (note.isNotEmpty) 'note': note,
       };
 }
 
@@ -110,6 +115,7 @@ class StoreOrder {
   final String userId; // فارغ إذا الزبون ما مسجل دخول
   final OrderStatus status;
   final DateTime? createdAt;
+  final String pushToken; // توكن تليفون الزبون للإشعارات (ينكتب بس، ما ينقرا)
 
   const StoreOrder({
     this.id = '',
@@ -121,6 +127,7 @@ class StoreOrder {
     this.userId = '',
     this.status = OrderStatus.pending,
     this.createdAt,
+    this.pushToken = '',
   });
 
   factory StoreOrder.fromCart(
@@ -129,6 +136,7 @@ class StoreOrder {
     required String deliveryDay,
     required PickupMethod pickupMethod,
     String userId = '',
+    String pushToken = '',
   }) =>
       StoreOrder(
         customer: customer,
@@ -137,6 +145,20 @@ class StoreOrder {
         deliveryDay: deliveryDay,
         pickupMethod: pickupMethod,
         userId: userId,
+        pushToken: pushToken,
+      );
+
+  StoreOrder copyWithPushToken(String token) => StoreOrder(
+        id: id,
+        customer: customer,
+        items: items,
+        total: total,
+        deliveryDay: deliveryDay,
+        pickupMethod: pickupMethod,
+        userId: userId,
+        status: status,
+        createdAt: createdAt,
+        pushToken: token,
       );
 
   StoreOrder copyWith({String? id, OrderStatus? status, DateTime? createdAt}) => StoreOrder(
@@ -149,5 +171,6 @@ class StoreOrder {
         userId: userId,
         status: status ?? this.status,
         createdAt: createdAt ?? this.createdAt,
+        pushToken: pushToken,
       );
 }

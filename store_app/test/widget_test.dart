@@ -11,13 +11,19 @@ import 'package:lacasa_store/main.dart';
 import 'package:lacasa_store/models/content.dart';
 import 'package:lacasa_store/models/order.dart';
 import 'package:lacasa_store/models/product.dart';
+import 'package:lacasa_store/models/stats.dart';
+import 'package:lacasa_store/screens/admin/stats_tab.dart';
 import 'package:lacasa_store/screens/search_screen.dart';
 import 'package:lacasa_store/services/auth_service.dart';
 import 'package:lacasa_store/services/contact.dart';
+import 'package:lacasa_store/services/instagram.dart';
 import 'package:lacasa_store/services/media_uploader.dart';
 import 'package:lacasa_store/services/order_service.dart';
+import 'package:lacasa_store/services/push_service.dart';
 import 'package:lacasa_store/services/store_repository.dart';
+import 'package:lacasa_store/services/visit_tracker.dart';
 import 'package:lacasa_store/state/cart.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// حسابات وهمية: الباسورد لازم يكون "secret".
 class FakeAuthService implements AuthService {
@@ -75,9 +81,26 @@ class FakeAuthService implements AuthService {
 
 class RecordingNotifier extends OrderNotifier {
   final sent = <StoreOrder>[];
+  final statusChanges = <String>[];
 
   @override
   Future<void> notify(StoreOrder order) async => sent.add(order);
+
+  @override
+  Future<void> notifyStatus(String orderId) async => statusChanges.add(orderId);
+}
+
+class FakePush extends PushService {
+  final String token;
+  int asked = 0;
+
+  FakePush([this.token = '']);
+
+  @override
+  Future<String> deviceToken() async {
+    asked++;
+    return token;
+  }
 }
 
 class FakeUploader implements MediaUploader {
@@ -104,6 +127,7 @@ Widget app(
   AuthService? auth,
   OrderNotifier? notifier,
   MediaUploader? uploader,
+  PushService? push,
   bool showSplash = false,
 }) =>
     StoreApp(
@@ -111,8 +135,17 @@ Widget app(
       auth: auth ?? FakeAuthService(),
       notifier: notifier ?? RecordingNotifier(),
       uploader: uploader ?? FakeUploader(),
+      push: push ?? FakePush(),
       showSplash: showSplash,
     );
+
+/// تبويبات لوحة التحكم تتمرر، فنخلي التبويب يبين قبل ما ندوس عليه.
+Future<void> tapAdminTab(WidgetTester tester, String label) async {
+  final tab = find.widgetWithText(Tab, label);
+  await tester.ensureVisible(tab);
+  await tester.pumpAndSettle();
+  await tester.tap(tab);
+}
 
 void usePhoneSize(WidgetTester tester) {
   tester.view.physicalSize = const Size(1170, 2532);
@@ -155,8 +188,38 @@ void main() {
       ..add(b);
     expect(cart.count, 4);
     expect(cart.total, a.price * 3 + b.price);
-    cart.decrement(b);
+    cart.decrement(cart.items.last);
     expect(cart.quantityOf(b), 0);
+  });
+
+  test('the same product with different notes stays on separate lines', () {
+    final a = sample(0).copyWith(id: 'a');
+    final cart = Cart()
+      ..add(a, 1, 'بدون لون')
+      ..add(a, 2, ' بدون لون ')
+      ..add(a);
+    expect(cart.items.length, 2);
+    expect(cart.quantityOf(a), 4);
+    final order = StoreOrder.fromCart(
+      const Customer(name: 'x', phone: '07700000000'),
+      cart,
+      deliveryDay: 'السبت',
+      pickupMethod: PickupMethod.delivery,
+    );
+    expect(order.items.first.note, 'بدون لون');
+    expect(OrderItem.fromMap(order.items.first.toMap()).note, 'بدون لون');
+    expect(order.items.last.toMap().containsKey('note'), isFalse);
+  });
+
+  test('Instagram reel links become embed links', () {
+    expect(instagramEmbedUrl('https://www.instagram.com/reel/C7xYz_1-a/?igsh=abc'),
+        'https://www.instagram.com/reel/C7xYz_1-a/embed/');
+    expect(instagramEmbedUrl('https://instagram.com/reels/ABC/'), 'https://www.instagram.com/reel/ABC/embed/');
+    expect(instagramEmbedUrl('https://www.instagram.com/lacasa3d/reel/ABC'),
+        'https://www.instagram.com/reel/ABC/embed/');
+    expect(instagramEmbedUrl('https://www.instagram.com/p/XYZ/'), 'https://www.instagram.com/p/XYZ/embed/');
+    expect(instagramEmbedUrl('https://www.instagram.com/lacasa3d/'), isNull);
+    expect(instagramEmbedUrl('https://x/v.mp4'), isNull);
   });
 
   test('content round trips through maps', () {
@@ -214,9 +277,62 @@ void main() {
     await OrderNotifier(client: client, endpoint: 'https://srv.example/x').notify(order.copyWith(id: ''));
     expect(requests, hasLength(1));
 
+    // تغيير الحالة يروح لـ /notify-status بنفس السيرفر.
+    await OrderNotifier(client: client, endpoint: 'https://srv.example/notify-order').notifyStatus('o42');
+    expect(requests.last.url.toString(), 'https://srv.example/notify-status');
+    expect(jsonDecode(requests.last.body), {'orderId': 'o42'});
+
     // فشل السيرفر ما يوكف الطلب.
     final failing = MockClient((_) async => throw Exception('offline'));
     await OrderNotifier(client: failing, endpoint: 'https://srv.example/x').notify(order);
+  });
+
+  test('order stats count days, statuses, sales and top products', () {
+    final now = DateTime(2026, 10, 24, 15);
+    StoreOrder order(int total, OrderStatus status, DateTime at, {String phone = '07701234567', int qty = 1}) =>
+        StoreOrder(
+          customer: Customer(name: 'x', phone: phone),
+          items: [OrderItem(productId: 'p$total', name: 'منتج $total', price: total ~/ qty, quantity: qty)],
+          total: total,
+          status: status,
+          createdAt: at,
+        );
+    final stats = OrderStats.from([
+      order(1000, OrderStatus.done, DateTime(2026, 10, 24, 9), qty: 2),
+      order(2000, OrderStatus.pending, DateTime(2026, 10, 22), phone: '0780 000 0000'),
+      order(5000, OrderStatus.cancelled, DateTime(2026, 10, 24, 10)),
+      order(3000, OrderStatus.confirmed, DateTime(2026, 10, 2), phone: '+964 780 000 0000'),
+      order(4000, OrderStatus.done, DateTime(2026, 9, 30)),
+    ], now);
+    expect(stats.total, 5);
+    expect(stats.today, 2);
+    expect(stats.week, 3);
+    expect(stats.month, 4);
+    expect(stats.byStatus[OrderStatus.done], 2);
+    expect(stats.delivered, 5000);
+    expect(stats.expected, 10000);
+    expect(stats.average, 2500);
+    expect(stats.customers, 3); // 07701234567، 07800000000، 9647800000000
+    expect(stats.lastSevenDays, [0, 0, 0, 0, 1, 0, 2]);
+    expect(stats.topProducts.first.name, 'منتج 1000');
+    expect(stats.topProducts.first.quantity, 2);
+    expect(stats.topProducts.any((p) => p.name == 'منتج 5000'), isFalse); // الملغي ما ينحسب
+  });
+
+  test('a device counts as a visitor once a day', () async {
+    SharedPreferences.setMockInitialValues({});
+    final repo = InMemoryStoreRepository();
+    final tracker = VisitTracker(repo);
+    await tracker.track(now: DateTime(2026, 10, 24, 9));
+    await tracker.track(now: DateTime(2026, 10, 24, 20));
+    expect(repo.visits, hasLength(1));
+    final first = repo.visits.keys.single;
+    repo.visits.clear();
+    await tracker.track(now: DateTime(2026, 10, 25, 9));
+    expect(repo.visits.keys.single, first); // نفس الجهاز، نفس الرقم
+    final stats = await repo.loadVisitorStats(DateTime.now());
+    expect(stats.devices, 1);
+    expect(stats.today, 1);
   });
 
   test('user orders only include that user', () async {
@@ -268,7 +384,8 @@ void main() {
     usePhoneSize(tester);
     final repo = InMemoryStoreRepository(products: [sample(0), sample(2)], categories: sampleCategories);
     final notifier = RecordingNotifier();
-    await tester.pumpWidget(app(repo, notifier: notifier));
+    final push = FakePush('phone-token-1');
+    await tester.pumpWidget(app(repo, notifier: notifier, push: push));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byTooltip('أضف للسلة').first);
@@ -303,6 +420,8 @@ void main() {
     expect(order.customer.address, 'بغداد، الكرادة');
     expect(order.userId, isEmpty);
     expect(notifier.sent.single.id, order.id);
+    expect(push.asked, 1);
+    expect(order.pushToken, 'phone-token-1');
   });
 
   testWidgets('customer signs up and sees their orders', (tester) async {
@@ -379,7 +498,7 @@ void main() {
     await tester.enterText(find.byType(TextFormField).at(1), 'secret');
     await tester.tap(find.widgetWithText(FilledButton, 'دخول'));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(Tab, 'المنتجات'));
+    await tapAdminTab(tester, 'المنتجات');
     await tester.pumpAndSettle();
     await tester.tap(find.text('منتج جديد'));
     await tester.pumpAndSettle();
@@ -423,7 +542,8 @@ void main() {
       deliveryDay: 'السبت',
     ));
     final auth = FakeAuthService(adminEmails: {'owner@example.com'});
-    await tester.pumpWidget(app(repo, auth: auth));
+    final notifier = RecordingNotifier();
+    await tester.pumpWidget(app(repo, auth: auth, notifier: notifier, push: FakePush('owner-phone')));
     await tester.pumpAndSettle();
     await tapTab(tester, 'الحساب');
 
@@ -437,6 +557,8 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'دخول'));
     await tester.pumpAndSettle();
     expect(find.text('لوحة التحكم'), findsOneWidget);
+    // موبايل المدير يتسجل حتى يوصله إشعار الطلبات الجديدة.
+    expect(repo.adminDevices.keys, ['owner-phone']);
 
     await tester.tap(find.text('زينب'));
     await tester.pumpAndSettle();
@@ -448,16 +570,31 @@ void main() {
     await tester.tap(find.text(OrderStatus.delivering.label).last);
     await tester.pumpAndSettle();
     expect(repo.orders.single.status, OrderStatus.delivering);
+    // الزبون ينبعثله إشعار بالحالة الجديدة.
+    expect(notifier.statusChanges, [repo.orders.single.id]);
+
+    // الإحصائيات.
+    await tapAdminTab(tester, 'الإحصائيات');
+    await tester.pumpAndSettle();
+    expect(find.text('زوار اليوم'), findsOneWidget);
+    expect(find.text('طلبات اليوم'), findsOneWidget);
+    expect(find.text('أكثر المنتجات طلباً'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('كيكة'),
+      200,
+      scrollable: find.descendant(of: find.byType(StatsTab), matching: find.byType(Scrollable)).first,
+    );
+    expect(find.text('كيكة'), findsOneWidget);
 
     // الأقسام القديمة تنضاف بضغطة.
-    await tester.tap(find.widgetWithText(Tab, 'الأقسام'));
+    await tapAdminTab(tester, 'الأقسام');
     await tester.pumpAndSettle();
     await tester.tap(find.text('أضف الأقسام القديمة'));
     await tester.pumpAndSettle();
     expect((await repo.watchCategories().first).map((c) => c.id), sampleCategories.map((c) => c.id));
 
     // عرض جديد يبين بالرئيسية.
-    await tester.tap(find.widgetWithText(Tab, 'العروض'));
+    await tapAdminTab(tester, 'العروض');
     await tester.pumpAndSettle();
     await tester.tap(find.text('عرض جديد'));
     await tester.pumpAndSettle();

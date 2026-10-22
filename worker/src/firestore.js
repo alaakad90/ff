@@ -56,6 +56,26 @@ export async function claimOrder({ projectId, token, orderId, updateTime, fetchI
   throw new Error(`firestore claim ${response.status}: ${body}`);
 }
 
+/**
+ * يحط statusNotified (آخر حالة انبعث إلها إشعار للزبون) بشرط الطلب ما تغير من وكت ما قريناه.
+ * يرجع false إذا طلب ثاني سبقنا. value = null يشيل الحقل.
+ */
+export async function setStatusNotified({ projectId, token, orderId, value, updateTime, fetchImpl = fetch }) {
+  const url = new URL(documentUrl(projectId, `orders/${orderId}`));
+  url.searchParams.set('updateMask.fieldPaths', 'statusNotified');
+  if (updateTime) url.searchParams.set('currentDocument.updateTime', updateTime);
+  const fields = value == null ? {} : { statusNotified: { stringValue: value } };
+  const response = await fetchImpl(url.toString(), {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fields }),
+  });
+  if (response.ok) return true;
+  const body = await response.text();
+  if (/FAILED_PRECONDITION|ABORTED/.test(body)) return false;
+  throw new Error(`firestore statusNotified ${response.status}: ${body}`);
+}
+
 /** يشيل notifiedAt حتى نكدر نعيد المحاولة إذا التليجرام فشل. */
 export async function releaseOrder({ projectId, token, orderId, fetchImpl = fetch }) {
   const url = new URL(documentUrl(projectId, `orders/${orderId}`));
@@ -64,5 +84,22 @@ export async function releaseOrder({ projectId, token, orderId, fetchImpl = fetc
     method: 'PATCH',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ fields: {} }),
+  });
+}
+
+/** موبايلات صاحب المتجر (adminDevices/{token}) حتى نرسلها إشعار الطلب الجديد. */
+export async function listAdminDevices({ projectId, token, fetchImpl = fetch }) {
+  const response = await fetchImpl(`${documentUrl(projectId, 'adminDevices')}?pageSize=50`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) throw new Error(`firestore adminDevices ${response.status}: ${await response.text()}`);
+  const body = await response.json();
+  return (body.documents || []).map((doc) => decodeURIComponent(doc.name.split('/').pop()));
+}
+
+export async function deleteAdminDevice({ projectId, token, deviceToken, fetchImpl = fetch }) {
+  await fetchImpl(documentUrl(projectId, `adminDevices/${encodeURIComponent(deviceToken)}`), {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
   });
 }

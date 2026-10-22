@@ -39,6 +39,7 @@ export function buildMessage(orderId, order) {
     const quantity = Number(item.quantity) || 0;
     const price = Number(item.price) || 0;
     lines.push(`• ${item.name} × ${quantity} = ${formatPrice(price * quantity)}`);
+    if (item.note) lines.push(`   📝 ${item.note}`);
   }
   lines.push('');
   lines.push(`💰 المجموع: ${formatPrice(Number(order.total) || 0)}`);

@@ -65,19 +65,26 @@ class CartScreen extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(item.product.name, style: theme.textTheme.titleMedium),
+                              if (item.note.isNotEmpty)
+                                Text(
+                                  '📝 ${item.note}',
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.bodySmall,
+                                ),
                               Text(formatPrice(item.total)),
                             ],
                           ),
                         ),
                         IconButton(
                           tooltip: 'نقص',
-                          onPressed: () => cart.decrement(item.product),
+                          onPressed: () => cart.decrement(item),
                           icon: const Icon(Icons.remove_circle_outline),
                         ),
                         Text('${item.quantity}', style: theme.textTheme.titleMedium),
                         IconButton(
                           tooltip: 'زيد',
-                          onPressed: () => cart.add(item.product),
+                          onPressed: () => cart.increment(item),
                           icon: const Icon(Icons.add_circle_outline),
                         ),
                       ],

@@ -1,7 +1,10 @@
-// توكن Google من مفتاح الخدمة (service account) حتى نقرا ونكتب بـ Firestore.
+// توكن Google من مفتاح الخدمة (service account) حتى نقرا ونكتب بـ Firestore ونرسل إشعارات FCM.
 // نسوي JWT موقّع بـ RS256 وننطيه لـ Google مقابل access token.
 
-const SCOPE = 'https://www.googleapis.com/auth/datastore';
+const SCOPE = [
+  'https://www.googleapis.com/auth/datastore',
+  'https://www.googleapis.com/auth/firebase.messaging',
+].join(' ');
 
 const encoder = new TextEncoder();
 

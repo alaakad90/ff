@@ -62,8 +62,11 @@ const orderFields = (overrides = {}) => ({
 });
 
 /** Firestore وTelegram وGoogle وهميين، يسجلون كل طلب. */
-function fakeBackend({ fields = orderFields(), claimConflict = false, telegramFails = false } = {}) {
-  const calls = { telegram: [], patches: [] };
+function fakeBackend({
+  fields = orderFields(), claimConflict = false, telegramFails = false, fcm = 200, adminDevices = [],
+} = {}) {
+  const calls = { telegram: [], patches: [], push: [], deleted: [] };
+  const admins = [...adminDevices];
   let doc = fields ? { fields: { ...fields }, updateTime: '2026-10-24T06:04:00.000001Z' } : null;
   const fetchImpl = async (input, init = {}) => {
     const url = new URL(typeof input === 'string' ? input : input.url);
@@ -73,6 +76,17 @@ function fakeBackend({ fields = orderFields(), claimConflict = false, telegramFa
     }
     if (url.host === 'firestore.googleapis.com') {
       assert.equal(init.headers.Authorization, 'Bearer ya29.fake');
+      if (url.pathname.includes('/documents/adminDevices')) {
+        if (method === 'DELETE') {
+          const id = decodeURIComponent(url.pathname.split('/').pop());
+          calls.deleted.push(id);
+          admins.splice(admins.indexOf(id), 1);
+          return Response.json({});
+        }
+        return Response.json({
+          documents: admins.map((t) => ({ name: `projects/${PROJECT}/databases/(default)/documents/adminDevices/${t}` })),
+        });
+      }
       assert.match(url.pathname, new RegExp(`/projects/${PROJECT}/databases/\\(default\\)/documents/orders/`));
       if (method === 'GET') return doc ? Response.json(doc) : new Response('{}', { status: 404 });
       if (method === 'PATCH') {
@@ -81,10 +95,20 @@ function fakeBackend({ fields = orderFields(), claimConflict = false, telegramFa
           return new Response('{"error":{"status":"FAILED_PRECONDITION"}}', { status: 400 });
         }
         const next = JSON.parse(init.body).fields;
-        if (next.notifiedAt) doc.fields.notifiedAt = next.notifiedAt;
-        else delete doc.fields.notifiedAt;
+        const field = url.searchParams.get('updateMask.fieldPaths');
+        if (next[field]) doc.fields[field] = next[field];
+        else delete doc.fields[field];
         return Response.json(doc);
       }
+    }
+    if (url.host === 'fcm.googleapis.com') {
+      assert.equal(url.pathname, `/v1/projects/${PROJECT}/messages:send`);
+      const message = JSON.parse(init.body).message;
+      calls.push.push(message);
+      if (message.token.startsWith('gone')) return new Response('{"error":{"status":"NOT_FOUND"}}', { status: 404 });
+      if (fcm === 200) return Response.json({ name: 'projects/x/messages/1' });
+      if (fcm === 404) return new Response('{"error":{"details":[{"errorCode":"UNREGISTERED"}]}}', { status: 404 });
+      return new Response('{"error":{"status":"UNAVAILABLE"}}', { status: fcm });
     }
     if (url.host === 'api.telegram.org') {
       assert.equal(url.pathname, '/botTOKEN123/sendMessage');
@@ -137,7 +161,16 @@ describe('telegram message', () => {
     assert.match(text, /الاسم: علي/);
     assert.match(text, /• ساعة خشب × 2 = 70,000 د\.ع/);
     assert.match(text, /المجموع: 70,000 د\.ع/);
-    assert.doesNotMatch(text, /ملاحظات/);
+    assert.doesNotMatch(text, /ملاحظات|📝/);
+  });
+
+  it('shows the customer note under its product', () => {
+    const text = buildMessage('o43', {
+      customer: { name: 'علي', phone: '0770' },
+      items: [{ name: 'ساعة خشب', price: 35000, quantity: 1, note: 'اكتبوا اسم سارة' }],
+      total: 35000,
+    });
+    assert.match(text, /• ساعة خشب × 1 = 35,000 د\.ع\n {3}📝 اكتبوا اسم سارة/);
   });
 });
 
@@ -149,7 +182,10 @@ describe('google token', () => {
     const decode = (s) => JSON.parse(Buffer.from(s, 'base64url').toString());
     assert.deepEqual(decode(header), { alg: 'RS256', typ: 'JWT' });
     assert.equal(decode(claims).iss, account.client_email);
-    assert.equal(decode(claims).scope, 'https://www.googleapis.com/auth/datastore');
+    assert.equal(
+      decode(claims).scope,
+      'https://www.googleapis.com/auth/datastore https://www.googleapis.com/auth/firebase.messaging',
+    );
     assert.equal(decode(claims).exp, 1_700_003_600);
     const valid = await crypto.subtle.verify(
       'RSASSA-PKCS1-v1_5',
@@ -184,6 +220,24 @@ describe('POST /notify-order', () => {
     const again = await callWorker({ orderId: 'abc123' }, env, backend);
     assert.deepEqual(again.body, { ok: true, alreadyNotified: true });
     assert.equal(backend.calls.telegram.length, 1);
+  });
+
+  it("pushes \"new order\" to the owner's phones and forgets uninstalled ones", async () => {
+    const backend = fakeBackend({ adminDevices: ['owner:phone-1', 'gone-phone'] });
+    const res = await callWorker({ orderId: 'abc123' }, env, backend);
+    assert.deepEqual(res.body, { ok: true });
+    assert.equal(backend.calls.telegram.length, 1);
+    assert.deepEqual(backend.calls.push.map((m) => m.token).sort(), ['gone-phone', 'owner:phone-1']);
+    assert.equal(backend.calls.push[0].notification.title, '🛍️ طلب جديد');
+    assert.equal(backend.calls.push[0].notification.body, 'علي • 70,000 د.ع • الخميس');
+    assert.deepEqual(backend.calls.deleted, ['gone-phone']);
+  });
+
+  it('still answers ok when the owner push fails after Telegram', async () => {
+    const backend = fakeBackend({ adminDevices: ['owner-phone'], fcm: 500 });
+    const res = await callWorker({ orderId: 'abc123' }, env, backend);
+    assert.deepEqual(res.body, { ok: true });
+    assert.ok(backend.doc.fields.notifiedAt);
   });
 
   it('does not send when another request claimed the order first', async () => {
@@ -224,6 +278,78 @@ describe('POST /notify-order', () => {
     assert.equal((await callWorker(null, env, backend, { method: 'GET', path: '/' })).status, 200);
     assert.equal((await callWorker({ orderId: 'abc' }, {}, backend)).status, 500);
     assert.equal(backend.calls.telegram.length, 0);
+  });
+});
+
+describe('POST /notify-status', () => {
+  let env;
+  beforeEach(async () => {
+    clearTokenCache();
+    const { account } = await makeServiceAccount();
+    env = { FIREBASE_SERVICE_ACCOUNT: JSON.stringify(account), BOT_TOKEN: 'TOKEN123', CHAT_ID: '-5493985592' };
+  });
+  const withStatus = (status, extra = {}) => orderFields({
+    status: { stringValue: status },
+    pushToken: { stringValue: 'device-token-1' },
+    ...extra,
+  });
+  const notify = (backend) => callWorker({ orderId: 'abc123' }, env, backend, { path: '/notify-status' });
+
+  it('sends one push per status to the customer phone', async () => {
+    const backend = fakeBackend({ fields: withStatus('confirmed') });
+    assert.deepEqual((await notify(backend)).body, { ok: true });
+    assert.equal(backend.calls.push.length, 1);
+    assert.equal(backend.calls.push[0].token, 'device-token-1');
+    assert.equal(backend.calls.push[0].notification.title, '✅ انقبل طلبك');
+    assert.match(backend.calls.push[0].notification.body, /يوم التسليم: الخميس/);
+    assert.equal(backend.doc.fields.statusNotified.stringValue, 'confirmed');
+    assert.equal(backend.calls.patches[0].query['currentDocument.updateTime'], '2026-10-24T06:04:00.000001Z');
+
+    assert.deepEqual((await notify(backend)).body, { ok: true, alreadyNotified: true });
+    assert.equal(backend.calls.push.length, 1);
+
+    backend.doc.fields.status = { stringValue: 'delivering' };
+    await notify(backend);
+    assert.equal(backend.calls.push[1].notification.title, '🚚 طلبك بالطريق');
+    backend.doc.fields.status = { stringValue: 'done' };
+    await notify(backend);
+    assert.equal(backend.calls.push[2].notification.title, '🎉 تم تسليم طلبك');
+  });
+
+  it('tells pickup customers their order is ready', async () => {
+    const backend = fakeBackend({
+      fields: withStatus('delivering', { pickupMethod: { stringValue: 'pickup' } }),
+    });
+    await notify(backend);
+    assert.equal(backend.calls.push[0].notification.title, '📦 طلبك جاهز');
+  });
+
+  it('skips new and cancelled orders and orders without a phone token', async () => {
+    for (const fields of [withStatus('new'), withStatus('cancelled'), orderFields({ status: { stringValue: 'done' } })]) {
+      const backend = fakeBackend({ fields });
+      assert.deepEqual((await notify(backend)).body, { ok: true, skipped: true });
+      assert.equal(backend.calls.push.length, 0);
+      assert.equal(backend.calls.patches.length, 0);
+    }
+  });
+
+  it('does not send when another request claimed the status first', async () => {
+    const backend = fakeBackend({ fields: withStatus('confirmed'), claimConflict: true });
+    assert.deepEqual((await notify(backend)).body, { ok: true, alreadyNotified: true });
+    assert.equal(backend.calls.push.length, 0);
+  });
+
+  it('puts the previous status back when FCM fails, and accepts an uninstalled app', async () => {
+    const failing = fakeBackend({
+      fields: withStatus('delivering', { statusNotified: { stringValue: 'confirmed' } }),
+      fcm: 503,
+    });
+    assert.equal((await notify(failing)).status, 502);
+    assert.equal(failing.doc.fields.statusNotified.stringValue, 'confirmed');
+
+    const gone = fakeBackend({ fields: withStatus('done'), fcm: 404 });
+    assert.deepEqual((await notify(gone)).body, { ok: true, unregistered: true });
+    assert.equal(gone.doc.fields.statusNotified.stringValue, 'done');
   });
 });
 

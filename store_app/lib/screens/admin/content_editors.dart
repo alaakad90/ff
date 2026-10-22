@@ -367,7 +367,7 @@ class _ReelEditScreenState extends State<ReelEditScreen> {
           controller: _videoUrl,
           kind: MediaKind.video,
           label: 'رابط الفيديو',
-          helperText: 'رابط مباشر لملف الفيديو (mp4)، مو رابط صفحة يوتيوب أو إنستغرام',
+          helperText: 'ارفع فيديو، أو الصق رابط ريل من إنستغرام، أو رابط ملف mp4',
           validator: (v) => validateHttpsUrl(v, required: true),
         ),
         _gap,
