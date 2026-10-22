@@ -10,6 +10,7 @@ import 'screens/shell.dart';
 import 'screens/splash_screen.dart';
 import 'services/auth_service.dart';
 import 'services/media_uploader.dart';
+import 'services/note_attachments.dart';
 import 'services/order_service.dart';
 import 'services/push_service.dart';
 import 'services/store_repository.dart';
@@ -47,6 +48,7 @@ class StoreApp extends StatelessWidget {
   final OrderNotifier? notifier;
   final MediaUploader? uploader;
   final PushService? push;
+  final NoteAttachments? attachments;
   final bool showSplash;
 
   const StoreApp({
@@ -56,6 +58,7 @@ class StoreApp extends StatelessWidget {
     this.notifier,
     this.uploader,
     this.push,
+    this.attachments,
     this.showSplash = true,
   });
 
@@ -68,6 +71,7 @@ class StoreApp extends StatelessWidget {
         Provider.value(value: notifier ?? OrderNotifier()),
         Provider<MediaUploader>.value(value: uploader ?? SupabaseUploader()),
         Provider.value(value: push ?? const PushService()),
+        Provider<NoteAttachments>.value(value: attachments ?? SupabaseNoteAttachments()),
         ChangeNotifierProvider(create: (_) => Cart()),
         StreamProvider<Session>(
           create: (_) => auth.watchSession(),

@@ -19,7 +19,11 @@
 		</dict>
 	</array>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>حتى تختار صور وفيديوهات المنتجات والعروض من لوحة التحكم.</string>
+	<string>حتى ترفق صورة ويا ملاحظة المنتج، أو تختار صور وفيديوهات المنتجات من لوحة التحكم.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>حتى تصوّر وترفق صورة ويا ملاحظة المنتج.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>حتى تسجل فويس وترفقه ويا ملاحظة المنتج.</string>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>whatsapp</string>

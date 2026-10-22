@@ -72,6 +72,14 @@ class CartScreen extends StatelessWidget {
                                   overflow: TextOverflow.ellipsis,
                                   style: theme.textTheme.bodySmall,
                                 ),
+                              if (item.imageUrl.isNotEmpty || item.voiceUrl.isNotEmpty)
+                                Text(
+                                  [
+                                    if (item.imageUrl.isNotEmpty) '🖼️ صورة',
+                                    if (item.voiceUrl.isNotEmpty) '🎤 فويس',
+                                  ].join('  '),
+                                  style: theme.textTheme.bodySmall,
+                                ),
                               Text(formatPrice(item.total)),
                             ],
                           ),

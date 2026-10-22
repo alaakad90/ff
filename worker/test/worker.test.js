@@ -167,10 +167,19 @@ describe('telegram message', () => {
   it('shows the customer note under its product', () => {
     const text = buildMessage('o43', {
       customer: { name: 'علي', phone: '0770' },
-      items: [{ name: 'ساعة خشب', price: 35000, quantity: 1, note: 'اكتبوا اسم سارة' }],
+      items: [{
+        name: 'ساعة خشب',
+        price: 35000,
+        quantity: 1,
+        note: 'اكتبوا اسم سارة',
+        imageUrl: 'https://x.supabase.co/storage/v1/object/public/media/notes/u1/1-a.jpg',
+        voiceUrl: 'https://x.supabase.co/storage/v1/object/public/media/notes/u1/2-b.m4a',
+      }],
       total: 35000,
     });
     assert.match(text, /• ساعة خشب × 1 = 35,000 د\.ع\n {3}📝 اكتبوا اسم سارة/);
+    assert.match(text, /\n {3}🖼️ صورة: https:\/\/x\.supabase\.co\/\S+\/1-a\.jpg/);
+    assert.match(text, /\n {3}🎤 فويس: https:\/\/x\.supabase\.co\/\S+\/2-b\.m4a/);
   });
 });
 

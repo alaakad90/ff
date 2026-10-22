@@ -5,14 +5,17 @@ import '../models/product.dart';
 class CartItem {
   final Product product;
   final String note; // ملاحظة الزبون على هذا المنتج (اختياري)
+  final String imageUrl; // صورة يرفقها الزبون ويا الملاحظة (اختياري)
+  final String voiceUrl; // فويس يرفقه الزبون ويا الملاحظة (اختياري)
   int quantity;
 
-  CartItem(this.product, this.quantity, {this.note = ''});
+  CartItem(this.product, this.quantity, {this.note = '', this.imageUrl = '', this.voiceUrl = ''});
 
-  /// نفس المنتج بملاحظتين مختلفتين يكونن سطرين بالسلة.
-  String get key => itemKey(product, note);
+  /// نفس المنتج بملاحظتين (أو مرفقات) مختلفة يكونن سطرين بالسلة.
+  String get key => itemKey(product, note, imageUrl, voiceUrl);
 
-  static String itemKey(Product product, String note) => '${product.id}\n$note';
+  static String itemKey(Product product, String note, [String imageUrl = '', String voiceUrl = '']) =>
+      '${product.id}\n$note\n$imageUrl\n$voiceUrl';
 
   int get total => product.price * quantity;
 }
@@ -32,12 +35,12 @@ class Cart extends ChangeNotifier {
   int quantityOf(Product product) =>
       _items.values.where((item) => item.product.id == product.id).fold(0, (sum, item) => sum + item.quantity);
 
-  void add(Product product, [int quantity = 1, String note = '']) {
+  void add(Product product, [int quantity = 1, String note = '', String imageUrl = '', String voiceUrl = '']) {
     note = note.trim();
-    final key = CartItem.itemKey(product, note);
+    final key = CartItem.itemKey(product, note, imageUrl, voiceUrl);
     final item = _items[key];
     if (item == null) {
-      _items[key] = CartItem(product, quantity, note: note);
+      _items[key] = CartItem(product, quantity, note: note, imageUrl: imageUrl, voiceUrl: voiceUrl);
     } else {
       item.quantity += quantity;
     }

@@ -254,7 +254,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                         padding: const EdgeInsets.symmetric(vertical: 2),
                         child: Row(
                           children: [
-                            Expanded(child: Text('${item.product.name} × ${item.quantity}${item.note.isEmpty ? '' : '\n📝 ${item.note}'}')),
+                            Expanded(child: Text('${item.product.name} × ${item.quantity}${item.note.isEmpty ? '' : '\n📝 ${item.note}'}${item.imageUrl.isEmpty ? '' : '\n🖼️ صورة'}${item.voiceUrl.isEmpty ? '' : '\n🎤 فويس'}')),
                             Text(formatPrice(item.total)),
                           ],
                         ),

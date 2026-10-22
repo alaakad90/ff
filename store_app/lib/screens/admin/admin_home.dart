@@ -277,11 +277,38 @@ class _OrderCard extends StatelessWidget {
             info(Icons.location_on, SelectableText(customer.address)),
           if (customer.notes.isNotEmpty) info(Icons.note_alt_outlined, Text(customer.notes)),
           const Divider(),
-          for (final item in order.items)
+          for (final item in order.items) ...[
             Row(children: [
               Expanded(child: Text('${item.name} × ${item.quantity}${item.note.isEmpty ? '' : '\n📝 ${item.note}'}')),
               Text(formatPrice(item.total)),
             ]),
+            if (item.hasAttachments)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Wrap(spacing: 8, children: [
+                  if (item.imageUrl.isNotEmpty)
+                    InkWell(
+                      onTap: () => openLink(item.imageUrl),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.network(
+                          item.imageUrl,
+                          width: 72,
+                          height: 72,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, _, _) => const Icon(Icons.broken_image_outlined, size: 40),
+                        ),
+                      ),
+                    ),
+                  if (item.voiceUrl.isNotEmpty)
+                    OutlinedButton.icon(
+                      icon: const Icon(Icons.play_arrow),
+                      label: const Text('اسمع الفويس'),
+                      onPressed: () => openLink(item.voiceUrl),
+                    ),
+                ]),
+              ),
+          ],
           const SizedBox(height: 12),
           DropdownButtonFormField<OrderStatus>(
             initialValue: order.status,

@@ -38,6 +38,8 @@ const _contentTypes = {
   'm4v': 'video/x-m4v',
   '3gp': 'video/3gpp',
   'webm': 'video/webm',
+  'm4a': 'audio/mp4',
+  'aac': 'audio/aac',
 };
 
 /// مسار الملف داخل الـ bucket: images/1729550000000-k3j9x2.jpg
@@ -95,42 +97,59 @@ class SupabaseUploader implements MediaUploader {
     if (token == null) throw UploadException('سجل دخول بحساب المدير بالأول');
 
     final path = storagePath(kind, file.name);
-    final http.Response response;
-    try {
-      response = await _client
-          .post(
-            Uri.parse('${supabaseUrl.replaceAll(RegExp(r'/+$'), '')}'
-                '/storage/v1/object/$supabaseBucket/$path'),
-            headers: {
-              'Authorization': 'Bearer $token',
-              'apikey': supabaseAnonKey,
-              'Content-Type': contentTypeFor(path),
-              'Cache-Control': 'max-age=31536000',
-              'x-upsert': 'false',
-            },
-            body: await file.readAsBytes(),
-          )
-          .timeout(kind == MediaKind.image ? const Duration(minutes: 1) : const Duration(minutes: 6));
-    } catch (_) {
-      throw UploadException('ما كدرنا نرفع الملف. تأكد من الإنترنت وحاول مرة ثانية.');
-    }
+    return uploadToSupabase(
+      _client,
+      token: token,
+      path: path,
+      bytes: await file.readAsBytes(),
+      timeout: kind == MediaKind.image ? const Duration(minutes: 1) : const Duration(minutes: 6),
+    );
+  }
+}
 
-    if (response.statusCode != 200) {
-      throw UploadException(switch (response.statusCode) {
-        401 || 403 => 'هذا الحساب ما عنده صلاحية يرفع ملفات',
-        413 => 'الملف كبير هواية',
-        _ => 'ما كدرنا نرفع الملف (${_error(response.body) ?? response.statusCode})',
-      });
-    }
-    return publicUrl(supabaseUrl, supabaseBucket, path);
+/// يرفع ملف لـ Supabase Storage بتوكن Firebase ويرجع رابطه العام.
+Future<String> uploadToSupabase(
+  http.Client client, {
+  required String token,
+  required String path,
+  required List<int> bytes,
+  Duration timeout = const Duration(minutes: 1),
+}) async {
+  final http.Response response;
+  try {
+    response = await client
+        .post(
+          Uri.parse('${supabaseUrl.replaceAll(RegExp(r'/+$'), '')}'
+              '/storage/v1/object/$supabaseBucket/$path'),
+          headers: {
+            'Authorization': 'Bearer $token',
+            'apikey': supabaseAnonKey,
+            'Content-Type': contentTypeFor(path),
+            'Cache-Control': 'max-age=31536000',
+            'x-upsert': 'false',
+          },
+          body: bytes,
+        )
+        .timeout(timeout);
+  } catch (_) {
+    throw UploadException('ما كدرنا نرفع الملف. تأكد من الإنترنت وحاول مرة ثانية.');
   }
 
-  static String? _error(String body) {
-    try {
-      final json = jsonDecode(body) as Map;
-      return (json['message'] ?? json['error']) as String?;
-    } catch (_) {
-      return null;
-    }
+  if (response.statusCode != 200) {
+    throw UploadException(switch (response.statusCode) {
+      401 || 403 => 'هذا الحساب ما عنده صلاحية يرفع ملفات',
+      413 => 'الملف كبير هواية',
+      _ => 'ما كدرنا نرفع الملف (${_uploadError(response.body) ?? response.statusCode})',
+    });
+  }
+  return publicUrl(supabaseUrl, supabaseBucket, path);
+}
+
+String? _uploadError(String body) {
+  try {
+    final json = jsonDecode(body) as Map;
+    return (json['message'] ?? json['error']) as String?;
+  } catch (_) {
+    return null;
   }
 }
