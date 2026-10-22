@@ -21,7 +21,7 @@ const json = (status, body) =>
   });
 
 export async function notifyOrder(orderId, env, { fetchImpl = fetch, now = new Date(Date.now()) } = {}) {
-  const serviceAccount = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT);
+  const serviceAccount = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT.replace(/^\uFEFF/, '').trim());
   const projectId = serviceAccount.project_id;
   const token = await getAccessToken(serviceAccount, fetchImpl, now.getTime());
 
