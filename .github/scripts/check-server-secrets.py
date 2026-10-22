@@ -6,6 +6,7 @@ import json
 import os
 import re
 import sys
+import urllib.request
 
 errors = []
 
@@ -17,6 +18,32 @@ if not re.fullmatch(r"[A-Za-z0-9_\-]{20,200}", token):
 account = os.environ.get("CLOUDFLARE_ACCOUNT_ID", "")
 if not re.fullmatch(r"[0-9a-f]{32}", account.strip()):
     errors.append("CLOUDFLARE_ACCOUNT_ID should be the 32-character account id")
+
+
+def token_is_active(url):
+    request = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            return json.load(response).get("result", {}).get("status") == "active"
+    except Exception:
+        return False
+
+
+# نسأل Cloudflare إذا التوكن شغال (توكنات الحساب والمستخدم إلهن رابطين).
+if not errors:
+    api = "https://api.cloudflare.com/client/v4"
+    if not (token_is_active(f"{api}/user/tokens/verify")
+            or token_is_active(f"{api}/accounts/{account.strip()}/tokens/verify")):
+        if token == account.strip():
+            shape = "it is the account id"
+        elif re.fullmatch(r"[0-9a-f]{37}", token):
+            shape = "it looks like the Global API Key, not an API token"
+        elif re.fullmatch(r"[0-9a-f]{32}", token):
+            shape = "it looks like a token ID, not the token value"
+        else:
+            shape = f"{len(token)} chars"
+        errors.append(f"Cloudflare rejected CLOUDFLARE_API_TOKEN ({shape}); create a new token from the "
+                      "'Edit Cloudflare Workers' template and paste the value shown once after creating it")
 
 # Notepad بالويندوز أحياناً يضيف BOM بأول الملف، فنشيله.
 raw = os.environ.get("FIREBASE_SERVICE_ACCOUNT", "").lstrip("\ufeff").strip()
