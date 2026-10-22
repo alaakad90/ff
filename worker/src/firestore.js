@@ -86,3 +86,20 @@ export async function releaseOrder({ projectId, token, orderId, fetchImpl = fetc
     body: JSON.stringify({ fields: {} }),
   });
 }
+
+/** موبايلات صاحب المتجر (adminDevices/{token}) حتى نرسلها إشعار الطلب الجديد. */
+export async function listAdminDevices({ projectId, token, fetchImpl = fetch }) {
+  const response = await fetchImpl(`${documentUrl(projectId, 'adminDevices')}?pageSize=50`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) throw new Error(`firestore adminDevices ${response.status}: ${await response.text()}`);
+  const body = await response.json();
+  return (body.documents || []).map((doc) => decodeURIComponent(doc.name.split('/').pop()));
+}
+
+export async function deleteAdminDevice({ projectId, token, deviceToken, fetchImpl = fetch }) {
+  await fetchImpl(documentUrl(projectId, `adminDevices/${encodeURIComponent(deviceToken)}`), {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}

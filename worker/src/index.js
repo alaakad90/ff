@@ -10,9 +10,11 @@
 //   لتليفون الزبون مرة وحدة لكل حالة. محد يكدر يغير الحالة غير المدير (قواعد Firestore)،
 //   فمناداته من غير مكان ما ترسل شي جديد.
 
-import { claimOrder, getOrder, releaseOrder, setStatusNotified } from './firestore.js';
+import {
+  claimOrder, deleteAdminDevice, getOrder, listAdminDevices, releaseOrder, setStatusNotified,
+} from './firestore.js';
 import { getAccessToken } from './google.js';
-import { sendPush, statusMessage } from './push.js';
+import { newOrderMessage, sendPush, statusMessage } from './push.js';
 import { buildMessage, sendTelegram } from './telegram.js';
 
 /** الطلبات الأقدم من هيج ما ينبعث إلها إشعار (ما نعيد طلبات قديمة). */
@@ -62,7 +64,21 @@ export async function notifyOrder(orderId, env, { fetchImpl = fetch, now = new D
     await releaseOrder({ projectId, token, orderId, fetchImpl }).catch(() => {});
     throw error;
   }
+  // الإشعار إضافة على التليجرام: إذا فشل ما نعيد رسالة التليجرام.
+  await notifyAdmins({ projectId, token, order: order.data, fetchImpl }).catch((error) => {
+    console.error('admin push failed', orderId, error);
+  });
   return json(200, { ok: true });
+}
+
+/** يرسل "طلب جديد" لكل موبايلات صاحب المتجر، ويشيل الموبايلات اللي انمسح منها التطبيق. */
+async function notifyAdmins({ projectId, token, order, fetchImpl }) {
+  const devices = await listAdminDevices({ projectId, token, fetchImpl });
+  const message = newOrderMessage(order);
+  await Promise.all(devices.map(async (deviceToken) => {
+    const result = await sendPush({ projectId, token, deviceToken, ...message, fetchImpl });
+    if (result === 'unregistered') await deleteAdminDevice({ projectId, token, deviceToken, fetchImpl });
+  }));
 }
 
 export async function notifyStatus(orderId, env, { fetchImpl = fetch, now = new Date(Date.now()) } = {}) {

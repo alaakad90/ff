@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/content.dart';
 import '../models/order.dart';
 import '../models/product.dart';
+import '../models/stats.dart';
 
 /// كل التعامل مع قاعدة البيانات يمر من هنا.
 abstract class StoreRepository {
@@ -35,6 +36,14 @@ abstract class StoreRepository {
 
   Future<UserProfile> getProfile(String userId);
   Future<void> saveProfile(String userId, UserProfile profile);
+
+  /// إحصائيات: كل جهاز يفتح التطبيق يتسجل مرة باليوم، وكل حساب يتسجل أول ما يدخل.
+  Future<void> recordVisit(String deviceId, {required bool isNew, required String platform});
+  Future<void> recordMember(String userId);
+  Future<VisitorStats> loadVisitorStats(DateTime now);
+
+  /// موبايلات صاحب المتجر، حتى يوصلها إشعار من يجي طلب جديد.
+  Future<void> registerAdminDevice(String userId, String token);
 }
 
 List<Product> _sortProducts(Iterable<Product> items) =>
@@ -193,7 +202,57 @@ class FirestoreStoreRepository implements StoreRepository {
 
   @override
   Future<void> saveProfile(String userId, UserProfile profile) =>
-      _col('users').doc(userId).set(profile.toMap());
+      _col('users').doc(userId).set(profile.toMap(), SetOptions(merge: true));
+
+  @override
+  Future<void> recordVisit(String deviceId, {required bool isNew, required String platform}) async {
+    final doc = _col('devices').doc(deviceId);
+    if (!isNew) {
+      try {
+        await doc.update({'lastSeen': FieldValue.serverTimestamp()});
+        return;
+      } on FirebaseException catch (e) {
+        if (e.code != 'not-found') rethrow;
+      }
+    }
+    await doc.set({
+      'firstSeen': FieldValue.serverTimestamp(),
+      'lastSeen': FieldValue.serverTimestamp(),
+      'platform': platform,
+    });
+  }
+
+  @override
+  Future<void> recordMember(String userId) async {
+    final doc = _col('users').doc(userId);
+    final snap = await doc.get();
+    if (snap.data()?['joinedAt'] != null) return;
+    await doc.set({'joinedAt': FieldValue.serverTimestamp()}, SetOptions(merge: true));
+  }
+
+  @override
+  Future<VisitorStats> loadVisitorStats(DateTime now) async {
+    final today = Timestamp.fromDate(DateTime(now.year, now.month, now.day));
+    final week = Timestamp.fromDate(DateTime(now.year, now.month, now.day).subtract(const Duration(days: 6)));
+    final devices = _col('devices');
+    final counts = await Future.wait([
+      devices.count().get(),
+      devices.where('lastSeen', isGreaterThanOrEqualTo: today).count().get(),
+      devices.where('lastSeen', isGreaterThanOrEqualTo: week).count().get(),
+      _col('users').where('joinedAt', isNull: false).count().get(),
+    ]);
+    return VisitorStats(
+      devices: counts[0].count ?? 0,
+      today: counts[1].count ?? 0,
+      week: counts[2].count ?? 0,
+      members: counts[3].count ?? 0,
+    );
+  }
+
+  @override
+  Future<void> registerAdminDevice(String userId, String token) => _col('adminDevices')
+      .doc(token)
+      .set({'uid': userId, 'updatedAt': FieldValue.serverTimestamp()});
 }
 
 /// نسخة بالذاكرة للاختبارات.
@@ -345,4 +404,31 @@ class InMemoryStoreRepository implements StoreRepository {
   @override
   Future<void> saveProfile(String userId, UserProfile profile) async =>
       _profiles[userId] = profile;
+
+  /// deviceId ← آخر يوم فتح بيه التطبيق.
+  final visits = <String, DateTime>{};
+  final members = <String>{};
+  final adminDevices = <String, String>{};
+
+  @override
+  Future<void> recordVisit(String deviceId, {required bool isNew, required String platform}) async =>
+      visits[deviceId] = DateTime.now();
+
+  @override
+  Future<void> recordMember(String userId) async => members.add(userId);
+
+  @override
+  Future<VisitorStats> loadVisitorStats(DateTime now) async {
+    final today = DateTime(now.year, now.month, now.day);
+    final week = today.subtract(const Duration(days: 6));
+    return VisitorStats(
+      devices: visits.length,
+      today: visits.values.where((d) => !d.isBefore(today)).length,
+      week: visits.values.where((d) => !d.isBefore(week)).length,
+      members: members.length,
+    );
+  }
+
+  @override
+  Future<void> registerAdminDevice(String userId, String token) async => adminDevices[token] = userId;
 }

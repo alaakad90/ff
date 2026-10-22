@@ -9,23 +9,48 @@ import '../../models/product.dart';
 import '../../services/auth_service.dart';
 import '../../services/contact.dart';
 import '../../services/order_service.dart';
+import '../../services/push_service.dart';
 import '../../services/store_repository.dart';
 import '../../widgets/product_grid.dart';
 import '../../widgets/product_image.dart';
 import '../account/my_orders_screen.dart';
 import 'content_editors.dart';
 import 'product_edit_screen.dart';
+import 'stats_tab.dart';
 
 /// لوحة التحكم. تنفتح بتبويب الحساب لما صاحب المتجر يسجل دخول.
-class AdminHome extends StatelessWidget {
+class AdminHome extends StatefulWidget {
   final Session session;
 
   const AdminHome({super.key, required this.session});
 
   @override
+  State<AdminHome> createState() => _AdminHomeState();
+}
+
+class _AdminHomeState extends State<AdminHome> {
+  @override
+  void initState() {
+    super.initState();
+    _registerDevice();
+  }
+
+  /// هذا الموبايل يوصله إشعار من يجي طلب جديد.
+  Future<void> _registerDevice() async {
+    final repo = context.read<StoreRepository>();
+    final token = await context.read<PushService>().deviceToken();
+    if (token.isEmpty) return;
+    try {
+      await repo.registerAdminDevice(widget.session.uid, token);
+    } catch (_) {
+      // نحاول مرة ثانية بالفتحة الجاية.
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 6,
+      length: 7,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('لوحة التحكم'),
@@ -41,6 +66,7 @@ class AdminHome extends StatelessWidget {
             tabAlignment: TabAlignment.start,
             tabs: [
               Tab(icon: Icon(Icons.receipt_long), text: 'الطلبات'),
+              Tab(icon: Icon(Icons.insights_outlined), text: 'الإحصائيات'),
               Tab(icon: Icon(Icons.inventory_2_outlined), text: 'المنتجات'),
               Tab(icon: Icon(Icons.grid_view_outlined), text: 'الأقسام'),
               Tab(icon: Icon(Icons.view_carousel_outlined), text: 'العروض'),
@@ -51,6 +77,7 @@ class AdminHome extends StatelessWidget {
         ),
         body: const TabBarView(children: [
           _OrdersTab(),
+          StatsTab(),
           _ProductsTab(),
           _CategoriesTab(),
           _BannersTab(),

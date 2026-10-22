@@ -62,8 +62,11 @@ const orderFields = (overrides = {}) => ({
 });
 
 /** Firestore وTelegram وGoogle وهميين، يسجلون كل طلب. */
-function fakeBackend({ fields = orderFields(), claimConflict = false, telegramFails = false, fcm = 200 } = {}) {
-  const calls = { telegram: [], patches: [], push: [] };
+function fakeBackend({
+  fields = orderFields(), claimConflict = false, telegramFails = false, fcm = 200, adminDevices = [],
+} = {}) {
+  const calls = { telegram: [], patches: [], push: [], deleted: [] };
+  const admins = [...adminDevices];
   let doc = fields ? { fields: { ...fields }, updateTime: '2026-10-24T06:04:00.000001Z' } : null;
   const fetchImpl = async (input, init = {}) => {
     const url = new URL(typeof input === 'string' ? input : input.url);
@@ -73,6 +76,17 @@ function fakeBackend({ fields = orderFields(), claimConflict = false, telegramFa
     }
     if (url.host === 'firestore.googleapis.com') {
       assert.equal(init.headers.Authorization, 'Bearer ya29.fake');
+      if (url.pathname.includes('/documents/adminDevices')) {
+        if (method === 'DELETE') {
+          const id = decodeURIComponent(url.pathname.split('/').pop());
+          calls.deleted.push(id);
+          admins.splice(admins.indexOf(id), 1);
+          return Response.json({});
+        }
+        return Response.json({
+          documents: admins.map((t) => ({ name: `projects/${PROJECT}/databases/(default)/documents/adminDevices/${t}` })),
+        });
+      }
       assert.match(url.pathname, new RegExp(`/projects/${PROJECT}/databases/\\(default\\)/documents/orders/`));
       if (method === 'GET') return doc ? Response.json(doc) : new Response('{}', { status: 404 });
       if (method === 'PATCH') {
@@ -89,7 +103,9 @@ function fakeBackend({ fields = orderFields(), claimConflict = false, telegramFa
     }
     if (url.host === 'fcm.googleapis.com') {
       assert.equal(url.pathname, `/v1/projects/${PROJECT}/messages:send`);
-      calls.push.push(JSON.parse(init.body).message);
+      const message = JSON.parse(init.body).message;
+      calls.push.push(message);
+      if (message.token.startsWith('gone')) return new Response('{"error":{"status":"NOT_FOUND"}}', { status: 404 });
       if (fcm === 200) return Response.json({ name: 'projects/x/messages/1' });
       if (fcm === 404) return new Response('{"error":{"details":[{"errorCode":"UNREGISTERED"}]}}', { status: 404 });
       return new Response('{"error":{"status":"UNAVAILABLE"}}', { status: fcm });
@@ -204,6 +220,24 @@ describe('POST /notify-order', () => {
     const again = await callWorker({ orderId: 'abc123' }, env, backend);
     assert.deepEqual(again.body, { ok: true, alreadyNotified: true });
     assert.equal(backend.calls.telegram.length, 1);
+  });
+
+  it("pushes \"new order\" to the owner's phones and forgets uninstalled ones", async () => {
+    const backend = fakeBackend({ adminDevices: ['owner:phone-1', 'gone-phone'] });
+    const res = await callWorker({ orderId: 'abc123' }, env, backend);
+    assert.deepEqual(res.body, { ok: true });
+    assert.equal(backend.calls.telegram.length, 1);
+    assert.deepEqual(backend.calls.push.map((m) => m.token).sort(), ['gone-phone', 'owner:phone-1']);
+    assert.equal(backend.calls.push[0].notification.title, '🛍️ طلب جديد');
+    assert.equal(backend.calls.push[0].notification.body, 'علي • 70,000 د.ع • الخميس');
+    assert.deepEqual(backend.calls.deleted, ['gone-phone']);
+  });
+
+  it('still answers ok when the owner push fails after Telegram', async () => {
+    const backend = fakeBackend({ adminDevices: ['owner-phone'], fcm: 500 });
+    const res = await callWorker({ orderId: 'abc123' }, env, backend);
+    assert.deepEqual(res.body, { ok: true });
+    assert.ok(backend.doc.fields.notifiedAt);
   });
 
   it('does not send when another request claimed the order first', async () => {

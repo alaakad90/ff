@@ -13,6 +13,7 @@ import 'services/media_uploader.dart';
 import 'services/order_service.dart';
 import 'services/push_service.dart';
 import 'services/store_repository.dart';
+import 'services/visit_tracker.dart';
 import 'state/cart.dart';
 import 'theme.dart';
 
@@ -28,10 +29,14 @@ Future<void> main() async {
       content: Text([n.title, n.body].whereType<String>().join('\n')),
     ));
   });
-  runApp(StoreApp(
-    repository: FirestoreStoreRepository(),
-    auth: FirebaseAuthService(),
-  ));
+  final repository = FirestoreStoreRepository();
+  final auth = FirebaseAuthService();
+  // للإحصائيات: الزوار والحسابات المسجلة.
+  VisitTracker(repository).track();
+  auth.watchSession().listen((session) {
+    if (session.signedIn) repository.recordMember(session.uid).catchError((_) {});
+  });
+  runApp(StoreApp(repository: repository, auth: auth));
 }
 
 final messengerKey = GlobalKey<ScaffoldMessengerState>();

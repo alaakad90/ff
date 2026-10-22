@@ -1,4 +1,7 @@
-// إشعارات تليفون الزبون (Firebase Cloud Messaging) لما المدير يغير حالة الطلب.
+// إشعارات Firebase Cloud Messaging: للزبون لما المدير يغير حالة الطلب،
+// ولصاحب المتجر لما يجي طلب جديد.
+
+import { formatPrice } from './telegram.js';
 
 /** نص الإشعار لكل حالة. الحالات اللي مو هنا (جديد، ملغي) ما ينبعث إلها إشعار. */
 export function statusMessage(order) {
@@ -16,6 +19,13 @@ export function statusMessage(order) {
     default:
       return null;
   }
+}
+
+/** إشعار صاحب المتجر بطلب جديد. */
+export function newOrderMessage(order) {
+  const customer = order.customer || {};
+  const parts = [customer.name, formatPrice(Number(order.total) || 0), order.deliveryDay].filter(Boolean);
+  return { title: '🛍️ طلب جديد', body: parts.join(' • ') };
 }
 
 /**
