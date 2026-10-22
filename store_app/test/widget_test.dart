@@ -14,6 +14,7 @@ import 'package:lacasa_store/models/product.dart';
 import 'package:lacasa_store/screens/search_screen.dart';
 import 'package:lacasa_store/services/auth_service.dart';
 import 'package:lacasa_store/services/contact.dart';
+import 'package:lacasa_store/services/instagram.dart';
 import 'package:lacasa_store/services/media_uploader.dart';
 import 'package:lacasa_store/services/order_service.dart';
 import 'package:lacasa_store/services/store_repository.dart';
@@ -155,8 +156,38 @@ void main() {
       ..add(b);
     expect(cart.count, 4);
     expect(cart.total, a.price * 3 + b.price);
-    cart.decrement(b);
+    cart.decrement(cart.items.last);
     expect(cart.quantityOf(b), 0);
+  });
+
+  test('the same product with different notes stays on separate lines', () {
+    final a = sample(0).copyWith(id: 'a');
+    final cart = Cart()
+      ..add(a, 1, 'بدون لون')
+      ..add(a, 2, ' بدون لون ')
+      ..add(a);
+    expect(cart.items.length, 2);
+    expect(cart.quantityOf(a), 4);
+    final order = StoreOrder.fromCart(
+      const Customer(name: 'x', phone: '07700000000'),
+      cart,
+      deliveryDay: 'السبت',
+      pickupMethod: PickupMethod.delivery,
+    );
+    expect(order.items.first.note, 'بدون لون');
+    expect(OrderItem.fromMap(order.items.first.toMap()).note, 'بدون لون');
+    expect(order.items.last.toMap().containsKey('note'), isFalse);
+  });
+
+  test('Instagram reel links become embed links', () {
+    expect(instagramEmbedUrl('https://www.instagram.com/reel/C7xYz_1-a/?igsh=abc'),
+        'https://www.instagram.com/reel/C7xYz_1-a/embed/');
+    expect(instagramEmbedUrl('https://instagram.com/reels/ABC/'), 'https://www.instagram.com/reel/ABC/embed/');
+    expect(instagramEmbedUrl('https://www.instagram.com/lacasa3d/reel/ABC'),
+        'https://www.instagram.com/reel/ABC/embed/');
+    expect(instagramEmbedUrl('https://www.instagram.com/p/XYZ/'), 'https://www.instagram.com/p/XYZ/embed/');
+    expect(instagramEmbedUrl('https://www.instagram.com/lacasa3d/'), isNull);
+    expect(instagramEmbedUrl('https://x/v.mp4'), isNull);
   });
 
   test('content round trips through maps', () {

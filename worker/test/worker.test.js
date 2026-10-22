@@ -137,7 +137,16 @@ describe('telegram message', () => {
     assert.match(text, /الاسم: علي/);
     assert.match(text, /• ساعة خشب × 2 = 70,000 د\.ع/);
     assert.match(text, /المجموع: 70,000 د\.ع/);
-    assert.doesNotMatch(text, /ملاحظات/);
+    assert.doesNotMatch(text, /ملاحظات|📝/);
+  });
+
+  it('shows the customer note under its product', () => {
+    const text = buildMessage('o43', {
+      customer: { name: 'علي', phone: '0770' },
+      items: [{ name: 'ساعة خشب', price: 35000, quantity: 1, note: 'اكتبوا اسم سارة' }],
+      total: 35000,
+    });
+    assert.match(text, /• ساعة خشب × 1 = 35,000 د\.ع\n {3}📝 اكتبوا اسم سارة/);
   });
 });
 

@@ -95,7 +95,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
                       const SizedBox(height: 8),
                       for (final item in order.items)
                         Row(children: [
-                          Expanded(child: Text('${item.name} × ${item.quantity}')),
+                          Expanded(child: Text('${item.name} × ${item.quantity}${item.note.isEmpty ? '' : '\n📝 ${item.note}'}')),
                           Text(formatPrice(item.total)),
                         ]),
                       const Divider(),

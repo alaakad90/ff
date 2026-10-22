@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../models/content.dart';
 import '../models/product.dart';
+import '../services/contact.dart';
 import '../state/cart.dart';
 import '../widgets/cart_button.dart';
 import '../widgets/product_grid.dart';
@@ -18,11 +20,19 @@ class ProductScreen extends StatefulWidget {
 
 class _ProductScreenState extends State<ProductScreen> {
   int _quantity = 1;
+  final _note = TextEditingController();
+
+  @override
+  void dispose() {
+    _note.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final product = widget.product;
     final theme = Theme.of(context);
+    final whatsapp = context.watch<StoreInfo>().whatsapp;
 
     return Scaffold(
       appBar: AppBar(actions: const [CartButton()]),
@@ -67,6 +77,32 @@ class _ProductScreenState extends State<ProductScreen> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _note,
+                  maxLines: 2,
+                  maxLength: 300,
+                  decoration: const InputDecoration(
+                    labelText: 'ملاحظات على المنتج (اختياري)',
+                    hintText: 'مثلاً: اللون، القياس، كتابة اسم...',
+                    prefixIcon: Icon(Icons.note_alt_outlined),
+                  ),
+                ),
+                if (whatsapp.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF128C7E),
+                      minimumSize: const Size.fromHeight(48),
+                    ),
+                    icon: const Icon(Icons.chat_outlined),
+                    label: const Text('اسأل الإدارة بالواتساب'),
+                    onPressed: () => openWhatsapp(
+                      whatsapp,
+                      message: 'مرحبا، عندي سؤال عن: ${product.name} (${formatPrice(product.price)})',
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -79,7 +115,7 @@ class _ProductScreenState extends State<ProductScreen> {
             icon: const Icon(Icons.add_shopping_cart),
             label: Text('أضف للسلة • ${formatPrice(product.price * _quantity)}'),
             onPressed: () {
-              context.read<Cart>().add(product, _quantity);
+              context.read<Cart>().add(product, _quantity, _note.text);
               Navigator.of(context).pop();
               showAddedToCart(context, product);
             },

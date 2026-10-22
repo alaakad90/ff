@@ -68,12 +68,14 @@ class OrderItem {
   final String name;
   final int price;
   final int quantity;
+  final String note; // ملاحظة الزبون على هذا المنتج
 
   const OrderItem({
     required this.productId,
     required this.name,
     required this.price,
     required this.quantity,
+    this.note = '',
   });
 
   int get total => price * quantity;
@@ -83,6 +85,7 @@ class OrderItem {
         name: item.product.name,
         price: item.product.price,
         quantity: item.quantity,
+        note: item.note,
       );
 
   factory OrderItem.fromMap(Map<String, dynamic> data) => OrderItem(
@@ -90,6 +93,7 @@ class OrderItem {
         name: data['name'] as String? ?? '',
         price: (data['price'] as num?)?.toInt() ?? 0,
         quantity: (data['quantity'] as num?)?.toInt() ?? 0,
+        note: data['note'] as String? ?? '',
       );
 
   Map<String, dynamic> toMap() => {
@@ -97,6 +101,7 @@ class OrderItem {
         'name': name,
         'price': price,
         'quantity': quantity,
+        if (note.isNotEmpty) 'note': note,
       };
 }
 
