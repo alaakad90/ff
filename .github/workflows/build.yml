@@ -259,6 +259,11 @@ jobs:
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CODE_SIGN_STYLE=Automatic \
             "${AUTH[@]}" archive | tail -n 40
           test -d "$RUNNER_TEMP/Runner.xcarchive"
+          # الصلاحيات (entitlements) اللي انوقّع بيها التطبيق، حتى نتأكد من الإشعارات والدخول بآبل.
+          APP="$RUNNER_TEMP/Runner.xcarchive/Products/Applications/Runner.app"
+          codesign -d --entitlements - --xml "$APP" 2>/dev/null | plutil -p - || true
+          security cms -D -i "$APP/embedded.mobileprovision" 2>/dev/null \
+            | plutil -extract Entitlements xml1 -o - - | plutil -p - || true
           /usr/libexec/PlistBuddy -c "Add :teamID string $APPLE_TEAM_ID" ExportOptions.plist
           xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/Runner.xcarchive" \
             -exportOptionsPlist ExportOptions.plist -exportPath "$RUNNER_TEMP/export" \
