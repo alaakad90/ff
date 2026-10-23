@@ -220,7 +220,8 @@ jobs:
                 -authenticationKeyID "$ASC_KEY_ID"
                 -authenticationKeyIssuerID "$ASC_ISSUER_ID")
           # رقم البناء يزيد كل مرة، لأن TestFlight ما يقبل نفس الرقم مرتين.
-          flutter build ios --release --config-only \
+          # --no-codesign هنا بس حتى Flutter ما يدور على شهادة؛ التوقيع يصير بـ xcodebuild جوّا.
+          flutter build ios --release --config-only --no-codesign \
             --build-number="${{ github.run_number }}" \
             --dart-define=NOTIFY_URL="$NOTIFY_URL"
           cd ios
