@@ -51,13 +51,13 @@ class FakeAuthService implements AuthService {
   Future<void> signIn(String email, String password) async {
     if (password != 'secret') throw AuthException('الإيميل أو الباسورد غلط');
     final role = adminEmails.contains(email) ? Role.admin : Role.customer;
-    _emit(Session(role, uid: 'u-$email', email: email));
+    _emit(Session(role, uid: 'u-$email', email: email, usesPassword: true));
   }
 
   @override
   Future<String> signUp(String name, String email, String password) async {
     final uid = 'new${_nextUid++}';
-    _emit(Session(Role.customer, uid: uid, email: email, name: name));
+    _emit(Session(Role.customer, uid: uid, email: email, name: name, usesPassword: true));
     return uid;
   }
 
@@ -77,6 +77,25 @@ class FakeAuthService implements AuthService {
   Future<bool> signInWithGoogle() async {
     if (googleName == null) return false;
     _emit(Session(Role.customer, uid: 'g1', email: 'g@gmail.com', name: googleName!));
+    return true;
+  }
+
+  @override
+  bool supportsApple = false;
+
+  @override
+  Future<bool> signInWithApple() async {
+    _emit(const Session(Role.customer, uid: 'a1', email: 'x@privaterelay.appleid.com'));
+    return true;
+  }
+
+  final deleted = <String>[];
+
+  @override
+  Future<bool> deleteAccount({String? password}) async {
+    if (current.usesPassword && password != 'secret') throw AuthException('الإيميل أو الباسورد غلط');
+    deleted.add(current.uid);
+    _emit(Session.guest);
     return true;
   }
 }
@@ -537,6 +556,48 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('ساعة خشب × 1'), findsOneWidget);
     expect(find.text('توصيل • الأحد'), findsOneWidget);
+  });
+
+  testWidgets('customer signs in with Apple and deletes the account', (tester) async {
+    usePhoneSize(tester);
+    final repo = InMemoryStoreRepository();
+    final auth = FakeAuthService()..supportsApple = true;
+    await tester.pumpWidget(app(repo, auth: auth));
+    await tester.pumpAndSettle();
+    await tapTab(tester, 'الحساب');
+
+    await tester.ensureVisible(find.text('المتابعة بحساب Apple'));
+    await tester.tap(find.text('المتابعة بحساب Apple'));
+    await tester.pumpAndSettle();
+    expect(auth.current.uid, 'a1');
+
+    await tester.ensureVisible(find.text('حذف الحساب'));
+    await tester.tap(find.text('حذف الحساب'));
+    await tester.pumpAndSettle();
+    expect(find.byType(TextField), findsNothing); // داخل بآبل، فما يحتاج باسورد
+    await tester.tap(find.text('احذف'));
+    await tester.pumpAndSettle();
+    expect(auth.deleted, ['a1']);
+    expect(find.text('انحذف حسابك'), findsOneWidget);
+    expect(find.text('سجل دخول حتى تتابع طلباتك'), findsOneWidget);
+  });
+
+  testWidgets('deleting a password account asks for the password', (tester) async {
+    usePhoneSize(tester);
+    final auth = FakeAuthService();
+    await tester.pumpWidget(app(InMemoryStoreRepository(), auth: auth));
+    await tester.pumpAndSettle();
+    await auth.signIn('a@b.com', 'secret');
+    await tapTab(tester, 'الحساب');
+
+    await tester.ensureVisible(find.text('حذف الحساب'));
+    await tester.tap(find.text('حذف الحساب'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, 'اكتب الباسورد حتى نتأكد'), 'wrong');
+    await tester.tap(find.text('احذف'));
+    await tester.pumpAndSettle();
+    expect(auth.deleted, isEmpty);
+    expect(find.text('الإيميل أو الباسورد غلط'), findsOneWidget);
   });
 
   testWidgets('Google button only shows when configured and signs in', (tester) async {

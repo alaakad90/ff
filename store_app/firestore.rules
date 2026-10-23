@@ -86,8 +86,10 @@ service cloud.firestore {
     // معلومات الزبون: بس صاحب الحساب يشوفها ويعدلها. المدير يحسبهم بالإحصائيات.
     match /users/{uid} {
       allow read: if isAdmin() || (request.auth != null && request.auth.uid == uid);
-      allow write: if request.auth != null && request.auth.uid == uid
+      allow create, update: if request.auth != null && request.auth.uid == uid
         && validProfile(request.resource.data);
+      // الزبون يكدر يحذف حسابه ومعلوماته من التطبيق.
+      allow delete: if request.auth != null && request.auth.uid == uid;
     }
 
     // زوار التطبيق: كل جهاز يسجل رقم عشوائي ووكت آخر فتحة. المدير بس يشوفهم.

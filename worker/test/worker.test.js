@@ -362,6 +362,45 @@ describe('POST /notify-status', () => {
   });
 });
 
+describe('store pages', () => {
+  it('serves the privacy policy and support pages with the store contact info', async () => {
+    clearTokenCache();
+    const { account } = await makeServiceAccount();
+    const env = { FIREBASE_SERVICE_ACCOUNT: JSON.stringify(account), BOT_TOKEN: 'T', CHAT_ID: '1' };
+    const backend = {
+      fetchImpl: async (input) => {
+        const url = new URL(typeof input === 'string' ? input : input.url);
+        if (url.host === 'oauth2.googleapis.com') return Response.json({ access_token: 'ya29.fake', expires_in: 3600 });
+        assert.match(url.pathname, /documents\/settings\/store$/);
+        return Response.json({ fields: { whatsapp: { stringValue: '07701234567' }, address: { stringValue: 'بغداد <المنصور>' } } });
+      },
+    };
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = backend.fetchImpl;
+    try {
+      const privacy = await worker.fetch(new Request('https://x.workers.dev/privacy'), env);
+      assert.equal(privacy.status, 200);
+      assert.match(privacy.headers.get('Content-Type'), /text\/html/);
+      const html = await privacy.text();
+      assert.match(html, /سياسة الخصوصية/);
+      assert.match(html, /حذف الحساب/);
+      assert.match(html, /https:\/\/wa\.me\/9647701234567/);
+      assert.match(html, /بغداد &lt;المنصور&gt;/);
+
+      const support = await worker.fetch(new Request('https://x.workers.dev/support'), env);
+      assert.match(await support.text(), /الدفع عند الاستلام/);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
+  it('still serves the page when the store info cannot be read', async () => {
+    const res = await worker.fetch(new Request('https://x.workers.dev/privacy'), {});
+    assert.equal(res.status, 200);
+    assert.match(await res.text(), /عن المتجر/);
+  });
+});
+
 describe('parseServiceAccount', () => {
   it('accepts the key file with a BOM or without its outer braces', () => {
     const key = { type: 'service_account', project_id: 'p' };
