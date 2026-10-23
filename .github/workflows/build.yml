@@ -148,3 +148,14 @@ jobs:
       # بناء بدون توقيع للتأكد إنه يشتغل. للنشر على App Store يحتاج حساب Apple Developer.
       - name: Build iOS (no codesign)
         run: flutter build ios --release --no-codesign --dart-define=NOTIFY_URL="$NOTIFY_URL"
+      # ملف IPA بدون توقيع، حتى يتوقع ببرنامج مثل Sideloadly أو ESign وينصب للتجربة.
+      - name: Package unsigned IPA
+        run: |
+          rm -rf build/ipa && mkdir -p build/ipa/Payload
+          cp -R build/ios/iphoneos/Runner.app build/ipa/Payload/
+          cd build/ipa && zip -qry lacasa-store-unsigned.ipa Payload
+          ls -lh lacasa-store-unsigned.ipa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lacasa-store-ios-unsigned
+          path: store_app/build/ipa/lacasa-store-unsigned.ipa
