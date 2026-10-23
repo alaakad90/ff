@@ -192,7 +192,8 @@ jobs:
           [[ "$ASC_ISSUER_ID" =~ ^[0-9a-f-]{36}$ ]] || { echo "::error::ASC_ISSUER_ID should be the Issuer ID (looks like 69a6de7e-...)"; ok=false; }
           # يقبل الملف كله، أو بس السطور اللي بالنص إذا انلصقت بدون سطري BEGIN وEND.
           body=$(printf '%s' "$ASC_KEY_P8" | grep -v -- '-----' | tr -d ' \r\n\t')
-          [[ "$body" =~ ^[A-Za-z0-9+/=]{100,400}$ ]] || { echo "::error::ASC_KEY_P8 should be the whole AuthKey_XXXX.p8 file (${#body} key characters found)"; ok=false; }
+          # (bash مال macOS ما يقبل {100,400} بالـ regex لأن الحد 255، فنفحص الطول لحاله.)
+          [[ "$body" =~ ^[A-Za-z0-9+/=]+$ ]] && (( ${#body} >= 100 && ${#body} <= 400 )) || { echo "::error::ASC_KEY_P8 should be the whole AuthKey_XXXX.p8 file (${#body} key characters found)"; ok=false; }
           $ok || exit 1
           echo "ready=true" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
