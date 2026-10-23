@@ -123,10 +123,87 @@ class _CustomerAccount extends StatelessWidget {
             label: const Text('تسجيل خروج'),
             onPressed: () => context.read<AuthService>().signOut(),
           ),
+          const SizedBox(height: 24),
+          TextButton.icon(
+            style: TextButton.styleFrom(foregroundColor: theme.colorScheme.error),
+            icon: const Icon(Icons.delete_forever_outlined),
+            label: const Text('حذف الحساب'),
+            onPressed: () => _deleteAccount(context, session),
+          ),
         ],
       ),
     );
   }
+}
+
+/// يسأل الزبون يتأكد، وإذا داخل بالباسورد ياخذه منه، وبعدها يحذف الحساب.
+Future<void> _deleteAccount(BuildContext context, Session session) async {
+  // null يعني الزبون رجع بدون ما يحذف.
+  final password = await showDialog<String>(
+    context: context,
+    builder: (_) => _DeleteAccountDialog(askPassword: session.usesPassword),
+  );
+  if (password == null || !context.mounted) return;
+
+  final messenger = ScaffoldMessenger.of(context);
+  try {
+    final done = await context.read<AuthService>().deleteAccount(password: session.usesPassword ? password : null);
+    if (done) messenger.showSnackBar(const SnackBar(content: Text('انحذف حسابك')));
+  } on AuthException catch (e) {
+    messenger.showSnackBar(SnackBar(content: Text(e.message)));
+  } catch (_) {
+    messenger.showSnackBar(const SnackBar(content: Text('ما كدرنا نحذف الحساب. حاول مرة ثانية.')));
+  }
+}
+
+class _DeleteAccountDialog extends StatefulWidget {
+  final bool askPassword;
+
+  const _DeleteAccountDialog({required this.askPassword});
+
+  @override
+  State<_DeleteAccountDialog> createState() => _DeleteAccountDialogState();
+}
+
+class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
+  final _password = TextEditingController();
+
+  @override
+  void dispose() {
+    _password.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: const Text('حذف الحساب'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'راح ينحذف حسابك ومعلوماتك المحفوظة (الاسم والهاتف والعنوان)، وما تكدر ترجعها.\n'
+              'الطلبات اللي سويتها تبقى عند المتجر حتى نكمل توصيلها وحساباتنا.',
+            ),
+            if (widget.askPassword) ...[
+              const SizedBox(height: 12),
+              TextField(
+                controller: _password,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'اكتب الباسورد حتى نتأكد'),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('لا')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
+            onPressed: () => Navigator.pop(context, _password.text),
+            child: const Text('احذف'),
+          ),
+        ],
+      );
 }
 
 /// تسجيل دخول أو حساب جديد.
@@ -204,6 +281,21 @@ class _AuthFormState extends State<AuthForm> {
     });
   }
 
+  void _apple() {
+    final auth = context.read<AuthService>();
+    final repo = context.read<StoreRepository>();
+    _run(() async {
+      if (!await auth.signInWithApple()) return;
+      final session = await auth.watchSession().firstWhere((s) => s.signedIn);
+      final profile = await repo.getProfile(session.uid).catchError((_) => const UserProfile());
+      if (profile.name.isEmpty && session.name.isNotEmpty) {
+        await repo
+            .saveProfile(session.uid, UserProfile(name: session.name, phone: profile.phone, address: profile.address))
+            .catchError((_) {});
+      }
+    });
+  }
+
   void _resetPassword() {
     final email = _email.text.trim();
     if (!email.contains('@')) {
@@ -222,6 +314,7 @@ class _AuthFormState extends State<AuthForm> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final auth = context.read<AuthService>();
     return Form(
       key: _formKey,
       child: Column(
@@ -305,7 +398,7 @@ class _AuthFormState extends State<AuthForm> {
               onPressed: _loading ? null : _resetPassword,
               child: const Text('نسيت الباسورد؟'),
             ),
-          if (context.read<AuthService>().supportsGoogle) ...[
+          if (auth.supportsGoogle || auth.supportsApple) ...[
             const SizedBox(height: 8),
             Row(children: [
               const Expanded(child: Divider()),
@@ -315,7 +408,10 @@ class _AuthFormState extends State<AuthForm> {
               ),
               const Expanded(child: Divider()),
             ]),
-            const SizedBox(height: 12),
+            const SizedBox(height: 2),
+          ],
+          if (auth.supportsGoogle) ...[
+            const SizedBox(height: 10),
             OutlinedButton.icon(
               style: OutlinedButton.styleFrom(
                 minimumSize: const Size.fromHeight(52),
@@ -324,6 +420,19 @@ class _AuthFormState extends State<AuthForm> {
               onPressed: _loading ? null : _google,
               icon: const _GoogleMark(),
               label: const Text('المتابعة بحساب Google'),
+            ),
+          ],
+          if (auth.supportsApple) ...[
+            const SizedBox(height: 10),
+            FilledButton.icon(
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(52),
+                backgroundColor: Colors.black,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: _loading ? null : _apple,
+              icon: const Icon(Icons.apple, size: 24),
+              label: const Text('المتابعة بحساب Apple'),
             ),
           ],
         ],

@@ -43,3 +43,8 @@ class OrderNotifier {
     }
   }
 }
+
+/// رابط سياسة الخصوصية على سيرفر المتجر، أو فارغ إذا رابط السيرفر ما انطى وقت البناء.
+String get privacyPolicyUrl => OrderNotifier._endpoint.isEmpty
+    ? ''
+    : OrderNotifier._endpoint.replaceFirst(RegExp(r'/notify-order$'), '/privacy');

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../models/content.dart';
 import '../services/contact.dart';
+import '../services/order_service.dart';
 
 class AboutScreen extends StatelessWidget {
   const AboutScreen({super.key});
@@ -67,6 +68,11 @@ class AboutScreen extends StatelessWidget {
               onPressed: () => openLink(info.instagram.startsWith('http')
                   ? info.instagram
                   : 'https://instagram.com/${info.instagram.replaceAll('@', '')}'),
+            ),
+          if (privacyPolicyUrl.isNotEmpty)
+            TextButton(
+              onPressed: () => openLink(privacyPolicyUrl),
+              child: const Text('سياسة الخصوصية'),
             ),
         ],
       ),

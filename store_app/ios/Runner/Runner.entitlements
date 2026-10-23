@@ -5,5 +5,10 @@
 	<!-- إشعارات الآيفون (APNs). وقت الرفع لـ TestFlight تتحول لـ production تلقائياً. -->
 	<key>aps-environment</key>
 	<string>development</string>
+	<!-- الدخول بآبل (Sign in with Apple). -->
+	<key>com.apple.developer.applesignin</key>
+	<array>
+		<string>Default</string>
+	</array>
 </dict>
 </plist>

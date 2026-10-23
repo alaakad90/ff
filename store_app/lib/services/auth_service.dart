@@ -12,8 +12,9 @@ class Session {
   final String uid;
   final String email;
   final String name;
+  final bool usesPassword; // دخل بإيميل وباسورد (مو كوكل أو آبل)
 
-  const Session(this.role, {this.uid = '', this.email = '', this.name = ''});
+  const Session(this.role, {this.uid = '', this.email = '', this.name = '', this.usesPassword = false});
 
   static const guest = Session(Role.guest);
 
@@ -35,6 +36,16 @@ abstract class AuthService {
 
   /// يرجع false إذا الزبون سكر نافذة كوكل بدون ما يختار حساب.
   Future<bool> signInWithGoogle();
+
+  /// الدخول بآبل، بالآيفون بس.
+  bool get supportsApple;
+
+  /// يرجع false إذا الزبون سكر نافذة آبل.
+  Future<bool> signInWithApple();
+
+  /// يحذف الحساب ومعلوماته المحفوظة. يتأكد من صاحب الحساب أول:
+  /// بالباسورد [password]، أو بنافذة كوكل/آبل. يرجع false إذا سكرها.
+  Future<bool> deleteAccount({String? password});
 }
 
 class AuthException implements Exception {
@@ -55,6 +66,8 @@ String authErrorMessage(String code) => switch (code) {
       'account-exists-with-different-credential' =>
         'هذا الإيميل عنده حساب بالباسورد. سجل دخول بالإيميل والباسورد.',
       'user-disabled' => 'هذا الحساب موقوف',
+      'requires-recent-login' => 'سجل خروج ودخول مرة ثانية، وبعدين احذف الحساب',
+      'user-mismatch' => 'هذا مو نفس الحساب اللي داخل بيه',
       _ => 'صار خطأ ($code)',
     };
 
@@ -81,6 +94,7 @@ class FirebaseAuthService implements AuthService {
           uid: user.uid,
           email: user.email ?? '',
           name: user.displayName ?? '',
+          usesPassword: user.providerData.any((p) => p.providerId == 'password'),
         );
       });
 
@@ -133,6 +147,70 @@ class FirebaseAuthService implements AuthService {
     if (idToken == null) throw AuthException('ما كدرنا نكمل الدخول بكوكل');
     await _guard(() => _auth.signInWithCredential(GoogleAuthProvider.credential(idToken: idToken)));
     return true;
+  }
+
+  @override
+  bool get supportsApple => defaultTargetPlatform == TargetPlatform.iOS;
+
+  static bool _canceled(FirebaseAuthException e) =>
+      e.code.contains('cancel') || (e.message ?? '').contains('1001');
+
+  @override
+  Future<bool> signInWithApple() async {
+    try {
+      await _auth.signInWithProvider(AppleAuthProvider()
+        ..addScope('email')
+        ..addScope('name'));
+      return true;
+    } on FirebaseAuthException catch (e) {
+      if (_canceled(e)) return false;
+      throw AuthException(authErrorMessage(e.code));
+    }
+  }
+
+  @override
+  Future<bool> deleteAccount({String? password}) async {
+    final user = _auth.currentUser;
+    if (user == null) return true;
+    final providers = user.providerData.map((p) => p.providerId).toSet();
+    try {
+      // فايربيس يطلب تسجيل دخول جديد قبل الحذف، فنتأكد من صاحب الحساب.
+      if (providers.contains('password')) {
+        await user.reauthenticateWithCredential(
+          EmailAuthProvider.credential(email: user.email ?? '', password: password ?? ''),
+        );
+      } else if (providers.contains('apple.com')) {
+        await user.reauthenticateWithProvider(AppleAuthProvider());
+      } else if (providers.contains('google.com')) {
+        await _initGoogle();
+        final GoogleSignInAccount account;
+        try {
+          account = await GoogleSignIn.instance.authenticate();
+        } on GoogleSignInException catch (e) {
+          if (e.code == GoogleSignInExceptionCode.canceled) return false;
+          rethrow;
+        }
+        final idToken = account.authentication.idToken;
+        if (idToken == null) throw AuthException('ما كدرنا نتأكد من حساب كوكل');
+        await user.reauthenticateWithCredential(GoogleAuthProvider.credential(idToken: idToken));
+      }
+
+      final profile = _db.collection('users').doc(user.uid);
+      try {
+        await profile.delete();
+      } catch (_) {
+        // إذا قواعد Firestore بعدها القديمة (ما تسمح بالحذف)، نمسح المعلومات على الأقل.
+        await profile.set({'name': '', 'phone': '', 'address': ''}).catchError((_) {});
+      }
+      await user.delete();
+      await signOut();
+      return true;
+    } on FirebaseAuthException catch (e) {
+      if (_canceled(e)) return false;
+      throw AuthException(authErrorMessage(e.code));
+    } on GoogleSignInException catch (e) {
+      throw AuthException('ما كدرنا نتأكد من حساب كوكل (${e.code.name})');
+    }
   }
 
   @override

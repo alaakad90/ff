@@ -11,9 +11,10 @@
 //   فمناداته من غير مكان ما ترسل شي جديد.
 
 import {
-  claimOrder, deleteAdminDevice, getOrder, listAdminDevices, releaseOrder, setStatusNotified,
+  claimOrder, decodeFields, deleteAdminDevice, getOrder, listAdminDevices, releaseOrder, setStatusNotified,
 } from './firestore.js';
 import { getAccessToken } from './google.js';
+import { privacyPage, supportPage } from './pages.js';
 import { newOrderMessage, sendPush, statusMessage } from './push.js';
 import { buildMessage, sendTelegram } from './telegram.js';
 
@@ -110,11 +111,34 @@ export async function notifyStatus(orderId, env, { fetchImpl = fetch, now = new 
 
 const ROUTES = { '/notify-order': notifyOrder, '/notify-status': notifyStatus };
 
+const PAGES = { '/privacy': privacyPage, '/support': supportPage };
+
+/** معلومات التواصل من إعدادات المتجر. إذا ما كدرنا نقراها، الصفحة تطلع بدونها. */
+async function storeInfo(env) {
+  try {
+    const serviceAccount = parseServiceAccount(env.FIREBASE_SERVICE_ACCOUNT);
+    const token = await getAccessToken(serviceAccount);
+    const response = await fetch(
+      `https://firestore.googleapis.com/v1/projects/${serviceAccount.project_id}/databases/(default)/documents/settings/store`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    return response.ok ? decodeFields((await response.json()).fields || {}) : {};
+  } catch {
+    return {};
+  }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname === '/' && request.method === 'GET') {
       return json(200, { ok: true, service: 'lacasa-store' });
+    }
+    const pageFor = PAGES[url.pathname];
+    if (pageFor && request.method === 'GET') {
+      return new Response(pageFor(await storeInfo(env)), {
+        headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=300' },
+      });
     }
     const handler = ROUTES[url.pathname];
     if (!handler) return json(404, { error: 'not found' });
