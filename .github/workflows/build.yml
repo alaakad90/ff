@@ -3,6 +3,11 @@ name: Build store app
 on:
   push:
   workflow_dispatch:
+    inputs:
+      diagnose_push:
+        description: 'فحص الإشعارات (يرسل إشعار تجربة لموبايلات المدير)'
+        type: boolean
+        default: false
 
 defaults:
   run:
@@ -74,6 +79,22 @@ jobs:
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+
+  # فحص الإشعارات من زر Run workflow: يطبع أطوال التوكنات ورد Firebase بدون أسرار.
+  push-diagnose:
+    if: github.event_name == 'workflow_dispatch' && inputs.diagnose_push
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: worker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node scripts/diagnose-push.mjs
+        env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
 
   android:
@@ -148,3 +169,90 @@ jobs:
       # بناء بدون توقيع للتأكد إنه يشتغل. للنشر على App Store يحتاج حساب Apple Developer.
       - name: Build iOS (no codesign)
         run: flutter build ios --release --no-codesign --dart-define=NOTIFY_URL="$NOTIFY_URL"
+      # ملف IPA بدون توقيع، حتى يتوقع ببرنامج مثل Sideloadly أو ESign وينصب للتجربة.
+      - name: Package unsigned IPA
+        run: |
+          rm -rf build/ipa && mkdir -p build/ipa/Payload
+          cp -R build/ios/iphoneos/Runner.app build/ipa/Payload/
+          # توقيع ad-hoc حتى يكون للتطبيق وكل الـ frameworks توقيع؛ برامج مثل Sideloadly تعيد التوقيع بحسابك.
+          for f in build/ipa/Payload/Runner.app/Frameworks/*; do codesign --force --sign - "$f"; done
+          codesign --force --sign - build/ipa/Payload/Runner.app
+          codesign --verify --deep --verbose=2 build/ipa/Payload/Runner.app
+          cd build/ipa && zip -qry lacasa-store-unsigned.ipa Payload
+          ls -lh lacasa-store-unsigned.ipa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lacasa-store-ios-unsigned
+          path: store_app/build/ipa/lacasa-store-unsigned.ipa
+
+  # يوقّع نسخة الآيفون بحساب Apple Developer ويرفعها لـ TestFlight.
+  # يشتغل من master، أو يدوياً من زر Run workflow، إذا أسرار آبل موجودة.
+  # Xcode يسوي الشهادة والـ provisioning profile بنفسه عن طريق مفتاح App Store Connect API.
+  ios-testflight:
+    needs: test
+    if: github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch'
+    runs-on: macos-latest
+    env:
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+    steps:
+      - name: Check Apple secrets
+        id: apple
+        working-directory: .
+        run: |
+          if [ -z "$APPLE_TEAM_ID" ] || [ -z "$ASC_KEY_ID" ] || [ -z "$ASC_ISSUER_ID" ] || [ -z "$ASC_KEY_P8" ]; then
+            echo "::warning::APPLE_TEAM_ID / ASC_KEY_ID / ASC_ISSUER_ID / ASC_KEY_P8 not set; skipping TestFlight upload"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          ok=true
+          [[ "$APPLE_TEAM_ID" =~ ^[A-Z0-9]{10}$ ]] || { echo "::error::APPLE_TEAM_ID should be the 10-character Team ID"; ok=false; }
+          [[ "$ASC_KEY_ID" =~ ^[A-Z0-9]{10}$ ]] || { echo "::error::ASC_KEY_ID should be the 10-character Key ID"; ok=false; }
+          [[ "$ASC_ISSUER_ID" =~ ^[0-9a-f-]{36}$ ]] || { echo "::error::ASC_ISSUER_ID should be the Issuer ID (looks like 69a6de7e-...)"; ok=false; }
+          # يقبل الملف كله، أو بس السطور اللي بالنص إذا انلصقت بدون سطري BEGIN وEND.
+          body=$(printf '%s' "$ASC_KEY_P8" | grep -v -- '-----' | tr -d ' \r\n\t')
+          # (bash مال macOS ما يقبل {100,400} بالـ regex لأن الحد 255، فنفحص الطول لحاله.)
+          [[ "$body" =~ ^[A-Za-z0-9+/=]+$ ]] && (( ${#body} >= 100 && ${#body} <= 400 )) || { echo "::error::ASC_KEY_P8 should be the whole AuthKey_XXXX.p8 file (${#body} key characters found)"; ok=false; }
+          $ok || exit 1
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        if: steps.apple.outputs.ready == 'true'
+      - uses: subosito/flutter-action@v2
+        if: steps.apple.outputs.ready == 'true'
+        with:
+          channel: stable
+          cache: true
+      - name: Find server URL
+        if: steps.apple.outputs.ready == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: ../.github/scripts/notify-url.sh >> "$GITHUB_ENV"
+      - name: Archive and upload to TestFlight
+        if: steps.apple.outputs.ready == 'true'
+        run: |
+          KEY_PATH="$RUNNER_TEMP/AuthKey_$ASC_KEY_ID.p8"
+          body=$(printf '%s' "$ASC_KEY_P8" | grep -v -- '-----' | tr -d ' \r\n\t')
+          { echo "-----BEGIN PRIVATE KEY-----"; fold -w 64 <<< "$body"; echo "-----END PRIVATE KEY-----"; } > "$KEY_PATH"
+          AUTH=(-allowProvisioningUpdates
+                -authenticationKeyPath "$KEY_PATH"
+                -authenticationKeyID "$ASC_KEY_ID"
+                -authenticationKeyIssuerID "$ASC_ISSUER_ID")
+          # رقم البناء يزيد كل مرة، لأن TestFlight ما يقبل نفس الرقم مرتين.
+          # --no-codesign هنا بس حتى Flutter ما يدور على شهادة؛ التوقيع يصير بـ xcodebuild جوّا.
+          flutter build ios --release --config-only --no-codesign \
+            --build-number="${{ github.run_number }}" \
+            --dart-define=NOTIFY_URL="$NOTIFY_URL"
+          cd ios
+          xcodebuild -workspace Runner.xcworkspace -scheme Runner -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/Runner.xcarchive" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CODE_SIGN_STYLE=Automatic \
+            "${AUTH[@]}" archive | tail -n 40
+          test -d "$RUNNER_TEMP/Runner.xcarchive"
+          /usr/libexec/PlistBuddy -c "Add :teamID string $APPLE_TEAM_ID" ExportOptions.plist
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/Runner.xcarchive" \
+            -exportOptionsPlist ExportOptions.plist -exportPath "$RUNNER_TEMP/export" \
+            "${AUTH[@]}"
+          rm -f "$KEY_PATH"
