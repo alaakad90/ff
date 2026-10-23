@@ -3,6 +3,11 @@ name: Build store app
 on:
   push:
   workflow_dispatch:
+    inputs:
+      diagnose_push:
+        description: 'فحص الإشعارات (يرسل إشعار تجربة لموبايلات المدير)'
+        type: boolean
+        default: false
 
 defaults:
   run:
@@ -74,6 +79,22 @@ jobs:
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+
+  # فحص الإشعارات من زر Run workflow: يطبع أطوال التوكنات ورد Firebase بدون أسرار.
+  push-diagnose:
+    if: github.event_name == 'workflow_dispatch' && inputs.diagnose_push
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: worker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node scripts/diagnose-push.mjs
+        env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
 
   android:
