@@ -44,6 +44,13 @@ export function buildMessage(orderId, order) {
     if (item.voiceUrl) lines.push(`   🎤 فويس: ${item.voiceUrl}`);
   }
   lines.push('');
+  if (Number(order.discount) > 0) {
+    lines.push(`🧾 قبل الخصم: ${formatPrice(Number(order.subtotal) || 0)}`);
+    if (order.coupon?.code) lines.push(`🏷️ كوبون ${order.coupon.code}: -${formatPrice(Number(order.coupon.amount) || 0)}`);
+    if (Number(order.pointsUsed) > 0) {
+      lines.push(`⭐ ${order.pointsUsed} نقطة: -${formatPrice(Number(order.pointsDiscount) || 0)}`);
+    }
+  }
   lines.push(`💰 المجموع: ${formatPrice(Number(order.total) || 0)}`);
   lines.push('💵 الدفع: عند الاستلام');
   return lines.join('\n');
