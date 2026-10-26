@@ -8,6 +8,7 @@ import '../state/cart.dart';
 import '../widgets/cart_button.dart';
 import '../widgets/note_attachments_field.dart';
 import '../widgets/product_grid.dart';
+import '../widgets/price_tag.dart';
 import '../widgets/product_image.dart';
 import 'checkout_screen.dart';
 
@@ -54,8 +55,8 @@ class _ProductScreenState extends State<ProductScreen> {
               children: [
                 Text(product.name, style: theme.textTheme.headlineSmall),
                 const SizedBox(height: 8),
-                Text(
-                  formatPrice(product.price),
+                PriceTag(
+                  product: product,
                   style: theme.textTheme.titleLarge?.copyWith(
                     color: theme.colorScheme.secondary,
                     fontWeight: FontWeight.bold,

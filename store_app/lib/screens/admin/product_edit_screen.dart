@@ -6,6 +6,7 @@ import '../../models/product.dart';
 import '../../services/media_uploader.dart';
 import '../../services/store_repository.dart';
 import '../../widgets/media_url_field.dart';
+import '../../widgets/price_tag.dart';
 import '../../widgets/product_image.dart';
 import 'content_editors.dart' show validateHttpsUrl;
 
@@ -24,6 +25,9 @@ class _ProductEditScreenState extends State<ProductEditScreen> {
   late final _name = TextEditingController(text: widget.product?.name);
   late final _description = TextEditingController(text: widget.product?.description);
   late final _price = TextEditingController(text: widget.product?.price.toString());
+  late final _oldPrice = TextEditingController(
+    text: (widget.product?.onSale ?? false) ? widget.product!.oldPrice.toString() : '',
+  );
   late final _imageUrl = TextEditingController(text: widget.product?.imageUrl);
   late String _categoryId = widget.product?.categoryId ?? '';
   late bool _available = widget.product?.available ?? true;
@@ -36,19 +40,31 @@ class _ProductEditScreenState extends State<ProductEditScreen> {
     _name.dispose();
     _description.dispose();
     _price.dispose();
+    _oldPrice.dispose();
     _imageUrl.dispose();
     super.dispose();
   }
 
-  Product get _draft => Product(
+  static int _number(String text) => int.tryParse(text.replaceAll(',', '').trim()) ?? 0;
+
+  /// إذا نزّلت السعر وما كتبت "السعر قبل التخفيض"، السعر القديم يبين مشطوب بنفسه.
+  Product get _draft {
+    final price = _number(_price.text);
+    return Product(
         id: widget.product?.id ?? '',
         name: _name.text.trim(),
         description: _description.text.trim(),
-        price: int.tryParse(_price.text.replaceAll(',', '').trim()) ?? 0,
+        price: price,
+        oldPrice: saleOldPrice(
+          previousPrice: widget.product?.price,
+          newPrice: price,
+          enteredOldPrice: _number(_oldPrice.text),
+        ),
         categoryId: _categoryId,
         imageUrl: _imageUrl.text.trim(),
         available: _available,
       );
+  }
 
   Future<void> _run(Future<void> Function() action, String error) async {
     setState(() => _saving = true);
@@ -125,11 +141,40 @@ class _ProductEditScreenState extends State<ProductEditScreen> {
               controller: _price,
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(labelText: 'السعر', suffixText: 'د.ع'),
+              onChanged: (_) => setState(() {}),
               validator: (v) {
                 final price = int.tryParse((v ?? '').replaceAll(',', '').trim());
                 return (price == null || price <= 0) ? 'اكتب سعر صحيح' : null;
               },
             ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _oldPrice,
+              keyboardType: TextInputType.number,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                labelText: 'السعر قبل التخفيض (اختياري)',
+                suffixText: 'د.ع',
+                helperText: 'يبين للزبون مشطوب. إذا نزّلت السعر وتركته فارغ، ياخذ السعر القديم بنفسه.\n'
+                    'حتى تشيل التخفيض: امسحه.',
+                helperMaxLines: 3,
+              ),
+              validator: (v) {
+                if ((v ?? '').trim().isEmpty) return null;
+                final old = int.tryParse(v!.replaceAll(',', '').trim());
+                if (old == null || old < 0) return 'اكتب رقم صحيح';
+                if (old <= _number(_price.text)) return 'لازم يكون أكبر من السعر الحالي';
+                return null;
+              },
+            ),
+            if (_draft.onSale)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Row(children: [
+                  const Text('الزبون يشوف: '),
+                  Expanded(child: PriceTag(product: _draft)),
+                ]),
+              ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               initialValue: categories.any((c) => c.id == _categoryId) ? _categoryId : null,

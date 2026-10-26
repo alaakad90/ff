@@ -475,6 +475,54 @@ void main() {
     expect(repo.profiles['g1']?.name, 'حسين');
   });
 
+  test('lowering a price keeps the old price for the strike-through', () {
+    expect(saleOldPrice(previousPrice: 30000, newPrice: 24000, enteredOldPrice: 0), 30000);
+    expect(saleOldPrice(previousPrice: 25000, newPrice: 20000, enteredOldPrice: 30000), 30000, reason: 'second cut keeps the first price');
+    expect(saleOldPrice(previousPrice: 25000, newPrice: 25000, enteredOldPrice: 0), 0, reason: 'cleared field ends the sale');
+    expect(saleOldPrice(previousPrice: 24000, newPrice: 30000, enteredOldPrice: 0), 0, reason: 'price went up');
+    expect(saleOldPrice(previousPrice: null, newPrice: 20000, enteredOldPrice: 25000), 25000, reason: 'new product on sale');
+    const p = Product(name: 'x', price: 24000, oldPrice: 30000, categoryId: '');
+    expect((p.onSale, p.discountPercent), (true, 20));
+    expect(Product.fromMap('a', p.toMap()).oldPrice, 30000);
+    expect(const Product(name: 'x', price: 30000, oldPrice: 30000, categoryId: '').toMap()['oldPrice'], 0);
+  });
+
+  testWidgets('admin lowers a price and customers see the old price struck through', (tester) async {
+    usePhoneSize(tester);
+    final repo = InMemoryStoreRepository(
+      categories: sampleCategories,
+      products: [const Product(id: 'p1', name: 'ساعة خشب', price: 30000, categoryId: 'gifts')],
+    );
+    final auth = FakeAuthService(adminEmails: {'owner@example.com'});
+    await tester.pumpWidget(app(repo, auth: auth));
+    await tester.pumpAndSettle();
+    await tapTab(tester, 'الحساب');
+    await tester.enterText(find.byType(TextFormField).at(0), 'owner@example.com');
+    await tester.enterText(find.byType(TextFormField).at(1), 'secret');
+    await tester.tap(find.widgetWithText(FilledButton, 'دخول'));
+    await tester.pumpAndSettle();
+    await tapAdminTab(tester, 'المنتجات');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('ساعة خشب'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextFormField, 'السعر'), '24000');
+    await tester.pumpAndSettle();
+    expect(find.text('الزبون يشوف: '), findsOneWidget, reason: 'live preview of the sale');
+    await tester.tap(find.text('حفظ'));
+    await tester.pumpAndSettle();
+    final saved = (await repo.watchProducts().first).single;
+    expect((saved.price, saved.oldPrice), (24000, 30000));
+
+    await tester.tap(find.byTooltip('تسجيل خروج'));
+    await tester.pumpAndSettle();
+    await tapTab(tester, 'الرئيسية');
+    expect(find.text('24,000 د.ع'), findsOneWidget);
+    final old = tester.widget<Text>(find.text('30,000 د.ع'));
+    expect(old.style?.decoration, TextDecoration.lineThrough);
+    expect(find.text('خصم 20%'), findsOneWidget);
+  });
+
   testWidgets('admin uploads a product photo from the phone', (tester) async {
     usePhoneSize(tester);
     final repo = InMemoryStoreRepository(categories: sampleCategories);
@@ -502,7 +550,9 @@ void main() {
       ..result = 'https://abcd.supabase.co/storage/v1/object/public/media/images/a.jpg';
     await tester.tap(find.text('منتج جديد'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('اختار صورة من الموبايل'));
+    // نخلي الزر بنص الشاشة، حتى ما يكون تحت زر "حفظ" الثابت.
+    await Scrollable.ensureVisible(tester.element(find.text('اختار صورة من الموبايل')), alignment: 0.5);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('اختار صورة من الموبايل'));
     await tester.pumpAndSettle();
     expect(uploader.picked, [MediaKind.image]);
