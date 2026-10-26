@@ -126,7 +126,7 @@ describe('coupons', () => {
   });
 
   it('a coupon with one use left goes to exactly one of many parallel orders', async () => {
-    const bodies = Array.from({ length: 5 }, (_, i) => orderBody({ coupon: 'ONCE5', customer: customer(`0770000000${i}`) }));
+    const bodies = Array.from({ length: 15 }, (_, i) => orderBody({ coupon: 'ONCE5', customer: customer(`07700000${String(i).padStart(3, '0')}`) }));
     const results = await Promise.all(bodies.map((b) => api('/api/orders', b)));
     assert.equal(results.filter((r) => r.status === 200).length, 1, JSON.stringify(results.map((r) => r.body.code)));
     assert.ok(results.filter((r) => r.status !== 200).every((r) => r.body.code === 'coupon_invalid'));

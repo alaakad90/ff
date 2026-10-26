@@ -4,6 +4,7 @@
 // ليش بالسيرفر؟ الأسعار والخصومات والنقاط لازم تنحسب من بيانات Firestore نفسها،
 // مو من التطبيق، حتى محد يكدر يغير السعر أو يستعمل كوبون أو نقاط مو إله.
 
+import { ConflictError } from './db.js';
 import { computeQuote, COUPON_CODE, loyaltySettings, normalizeCode, phoneKey } from './pricing.js';
 
 export const WEEK_DAYS = ['السبت', 'الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'];
@@ -179,85 +180,119 @@ export async function placeOrder(ctx, user, body) {
   const now = ctx.now;
   const orderPath = `orders/${requestId}`;
 
-  const result = await ctx.db.runTransaction(async (tx) => {
-    const existing = await tx.get(orderPath);
-    if (existing) {
-      const owner = existing.data.userId || '';
-      const caller = user && !user.anonymous ? user.uid : '';
-      if (existing.data.pricedBy !== 'server' || owner !== caller) {
-        throw new OrderError(409, 'duplicate', 'هذا الطلب موجود');
-      }
-      return { duplicate: true, order: existing.data };
-    }
-
-    const loaded = await loadAndQuote(tx, {
-      user, lines, couponCode, requestedPoints: body?.points, phone: customer.phone, now,
-    });
-    const { quote, uid, wallet, walletDoc, couponDoc, useDocs } = loaded;
-    if (quote.unavailable.length) {
-      throw new OrderError(409, 'unavailable', 'بعض المنتجات ما متوفرة هسه', { quote: publicQuote(quote) });
-    }
-    if (quote.couponError) {
-      throw new OrderError(409, 'coupon_invalid', quote.couponError.message, { quote: publicQuote(quote) });
-    }
-    const requested = Math.trunc(Number(body?.points) || 0);
-    if (requested > 0 && (quote.points?.points || 0) !== requested) {
-      throw new OrderError(409, 'points_changed', 'رصيد النقاط تغير', { quote: publicQuote(quote) });
-    }
-    if (body?.expectedTotal != null && Number(body.expectedTotal) !== quote.total) {
-      throw new OrderError(409, 'price_changed', 'الأسعار تغيرت، شوف المجموع الجديد', { quote: publicQuote(quote) });
-    }
-
-    const order = {
-      customer,
-      items: quote.items,
-      subtotal: quote.subtotal,
-      discount: (quote.coupon?.amount || 0) + (quote.points?.amount || 0),
-      ...(quote.coupon ? { coupon: quote.coupon } : {}),
-      ...(quote.points ? { pointsUsed: quote.points.points, pointsDiscount: quote.points.amount } : {}),
-      total: quote.total,
-      status: 'new',
-      statusHistory: [{ status: 'new', at: now }],
-      createdAt: now,
-      deliveryDay: body.deliveryDay,
-      pickupMethod,
-      ...(uid ? { userId: uid } : {}),
-      ...(pushToken ? { pushToken } : {}),
-      phoneKey: phoneKey(customer.phone),
-      trackingKey: randomKey(),
-      pricedBy: 'server',
-    };
-    tx.create(orderPath, order);
-
-    if (uid) {
-      const points = (Number(wallet.points) || 0) - (quote.points?.points || 0);
-      const walletUpdate = {
-        points,
-        ordersPlaced: (Number(wallet.ordersPlaced) || 0) + 1,
-        updatedAt: now,
-      };
-      if (walletDoc) tx.update(`wallets/${uid}`, walletUpdate);
-      else tx.create(`wallets/${uid}`, { ...walletUpdate, lifetimeEarned: 0, createdAt: now });
-      if (quote.points) {
-        tx.create(`wallets/${uid}/ledger/redeem-${requestId}`, {
-          type: 'redeem', points: -quote.points.points, orderId: requestId, createdAt: now,
-          note: `خصم ${quote.points.amount} د.ع على الطلب`,
-        });
-      }
-    }
-    if (quote.coupon) {
-      tx.update(`coupons/${couponCode}`, { usedCount: (Number(couponDoc.data.usedCount) || 0) + 1, updatedAt: now });
-      const keys = useKeys(uid, customer.phone);
-      keys.forEach((key, i) => {
-        tx.set(`coupons/${couponCode}/uses/${key}`, {
-          count: (Number(useDocs[i]?.data.count) || 0) + 1, lastOrderId: requestId, updatedAt: now,
-        });
-      });
-    }
-    return { duplicate: false, order };
+  const place = (tx) => createInTransaction(tx, {
+    user, body, requestId, orderPath, customer, lines, couponCode, pickupMethod, pushToken, now,
   });
 
+  // إذا طلبات كثيرة سوا على نفس الكوبون أو نفس المحفظة، المعاملة ممكن تتعارض وتنعاد.
+  // قبل كل إعادة نفحص الحالة الحالية بدون قفل: إذا الكوبون خلص أو النقاط تغيرت نرجع
+  // السبب الصحيح فوراً، بدال ما نبقى نتزاحم على نفس الوثيقة.
+  const MAX_ATTEMPTS = 4;
+  let result;
+  for (let attempt = 1; ; attempt++) {
+    if (attempt > 1 && !(await ctx.db.get(orderPath))) {
+      const { quote } = await loadAndQuote(ctx.db, {
+        user, lines, couponCode, requestedPoints: body?.points, phone: customer.phone, now,
+      });
+      checkQuote(quote, body);
+    }
+    try {
+      result = await ctx.db.runTransaction(place, { attempts: 1 });
+      break;
+    } catch (error) {
+      if (!(error instanceof ConflictError)) throw error;
+      if (attempt >= MAX_ATTEMPTS) throw new OrderError(409, 'busy', 'المتجر مشغول هسه، حاول مرة ثانية');
+      await new Promise((resolve) => setTimeout(resolve, 50 + Math.random() * 250 * attempt));
+    }
+  }
+
   return { orderId: requestId, ...result };
+}
+
+/** يرفض الطلب إذا الحساب ما يطابق اللي طلبه الزبون (منتج ما متوفر، كوبون، نقاط، سعر تغير). */
+function checkQuote(quote, body) {
+  if (quote.unavailable.length) {
+    throw new OrderError(409, 'unavailable', 'بعض المنتجات ما متوفرة هسه', { quote: publicQuote(quote) });
+  }
+  if (quote.couponError) {
+    throw new OrderError(409, 'coupon_invalid', quote.couponError.message, { quote: publicQuote(quote) });
+  }
+  const requested = Math.trunc(Number(body?.points) || 0);
+  if (requested > 0 && (quote.points?.points || 0) !== requested) {
+    throw new OrderError(409, 'points_changed', 'رصيد النقاط تغير', { quote: publicQuote(quote) });
+  }
+  if (body?.expectedTotal != null && Number(body.expectedTotal) !== quote.total) {
+    throw new OrderError(409, 'price_changed', 'الأسعار تغيرت، شوف المجموع الجديد', { quote: publicQuote(quote) });
+  }
+}
+
+/** داخل المعاملة: يتأكد ويكتب الطلب والنقاط والكوبون سوا. */
+async function createInTransaction(tx, {
+  user, body, requestId, orderPath, customer, lines, couponCode, pickupMethod, pushToken, now,
+}) {
+  const existing = await tx.get(orderPath);
+  if (existing) {
+    const owner = existing.data.userId || '';
+    const caller = user && !user.anonymous ? user.uid : '';
+    if (existing.data.pricedBy !== 'server' || owner !== caller) {
+      throw new OrderError(409, 'duplicate', 'هذا الطلب موجود');
+    }
+    return { duplicate: true, order: existing.data };
+  }
+
+  const loaded = await loadAndQuote(tx, {
+    user, lines, couponCode, requestedPoints: body?.points, phone: customer.phone, now,
+  });
+  const { quote, uid, wallet, walletDoc, couponDoc, useDocs } = loaded;
+  checkQuote(quote, body);
+
+  const order = {
+    customer,
+    items: quote.items,
+    subtotal: quote.subtotal,
+    discount: (quote.coupon?.amount || 0) + (quote.points?.amount || 0),
+    ...(quote.coupon ? { coupon: quote.coupon } : {}),
+    ...(quote.points ? { pointsUsed: quote.points.points, pointsDiscount: quote.points.amount } : {}),
+    total: quote.total,
+    status: 'new',
+    statusHistory: [{ status: 'new', at: now }],
+    createdAt: now,
+    deliveryDay: body.deliveryDay,
+    pickupMethod,
+    ...(uid ? { userId: uid } : {}),
+    ...(pushToken ? { pushToken } : {}),
+    phoneKey: phoneKey(customer.phone),
+    trackingKey: randomKey(),
+    pricedBy: 'server',
+  };
+  tx.create(orderPath, order);
+
+  if (uid) {
+    const points = (Number(wallet.points) || 0) - (quote.points?.points || 0);
+    const walletUpdate = {
+      points,
+      ordersPlaced: (Number(wallet.ordersPlaced) || 0) + 1,
+      updatedAt: now,
+    };
+    if (walletDoc) tx.update(`wallets/${uid}`, walletUpdate);
+    else tx.create(`wallets/${uid}`, { ...walletUpdate, lifetimeEarned: 0, createdAt: now });
+    if (quote.points) {
+      tx.create(`wallets/${uid}/ledger/redeem-${requestId}`, {
+        type: 'redeem', points: -quote.points.points, orderId: requestId, createdAt: now,
+        note: `خصم ${quote.points.amount} د.ع على الطلب`,
+      });
+    }
+  }
+  if (quote.coupon) {
+    tx.update(`coupons/${couponCode}`, { usedCount: (Number(couponDoc.data.usedCount) || 0) + 1, updatedAt: now });
+    const keys = useKeys(uid, customer.phone);
+    keys.forEach((key, i) => {
+      tx.set(`coupons/${couponCode}/uses/${key}`, {
+        count: (Number(useDocs[i]?.data.count) || 0) + 1, lastOrderId: requestId, updatedAt: now,
+      });
+    });
+  }
+  return { duplicate: false, order };
 }
 
 /** يقارن نصين بوقت ثابت تقريباً (حتى ما ينعرف المفتاح حرف حرف من وقت الرد). */
