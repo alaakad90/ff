@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/product.dart';
 import '../screens/product_screen.dart';
 import '../state/cart.dart';
+import 'price_tag.dart';
 import 'product_image.dart';
 
 void showAddedToCart(BuildContext context, Product product) {
@@ -59,7 +60,30 @@ class ProductCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(child: ProductImage(product: product, hero: hero)),
+            Expanded(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  ProductImage(product: product, hero: hero),
+                  if (product.onSale)
+                    PositionedDirectional(
+                      top: 8,
+                      start: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.error,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          'خصم ${product.discountPercent}%',
+                          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
               child: Text(
@@ -76,8 +100,9 @@ class ProductCard extends StatelessWidget {
                   Expanded(
                     child: Padding(
                       padding: const EdgeInsetsDirectional.only(start: 6),
-                      child: Text(
-                        formatPrice(product.price),
+                      child: PriceTag(
+                        product: product,
+                        showBadge: false,
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: theme.colorScheme.secondary,
                           fontWeight: FontWeight.w700,

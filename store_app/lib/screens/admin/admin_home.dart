@@ -392,7 +392,9 @@ class _ProductsTab extends StatelessWidget {
               ),
             ),
             title: Text(product.name),
-            subtitle: Text('${formatPrice(product.price)} • ${category?.name ?? 'بدون قسم'}'),
+            subtitle: Text('${formatPrice(product.price)}'
+                '${product.onSale ? ' (كان ${formatPrice(product.oldPrice)}، خصم ${product.discountPercent}%)' : ''}'
+                ' • ${category?.name ?? 'بدون قسم'}'),
             trailing: Switch(
               value: product.available,
               onChanged: (v) =>
