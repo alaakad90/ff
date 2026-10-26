@@ -40,9 +40,28 @@ jobs:
           node-version: '22'
       - run: npm test
 
+  # السيرفر وقواعد Firestore على محاكي Firestore الحقيقي: الأسعار، الكوبونات، النقاط،
+  # منع التكرار والتلاعب، والصلاحيات.
+  emulator-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: worker/emulator-test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci
+      - run: npm test
+
   # السيرفر (Cloudflare Worker) ينشر من master بس، أو يدوياً من زر Run workflow.
   deploy-worker:
-    needs: worker-test
+    needs: [worker-test, emulator-test]
     if: github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
@@ -262,6 +281,8 @@ jobs:
                 -authenticationKeyPath "$KEY_PATH"
                 -authenticationKeyID "$ASC_KEY_ID"
                 -authenticationKeyIssuerID "$ASC_ISSUER_ID")
+          # كل ماك جديد يسوي شهادة تطوير جديدة، فنلغي القديمة حتى ما نوصل لحد آبل.
+          ruby ../.github/scripts/revoke-dev-certs.rb "$KEY_PATH" "$ASC_KEY_ID" "$ASC_ISSUER_ID"
           # رقم البناء يزيد كل مرة، لأن TestFlight ما يقبل نفس الرقم مرتين.
           # --no-codesign هنا بس حتى Flutter ما يدور على شهادة؛ التوقيع يصير بـ xcodebuild جوّا.
           flutter build ios --release --config-only --no-codesign \

@@ -10,12 +10,16 @@ import '../../services/auth_service.dart';
 import '../../services/contact.dart';
 import '../../services/order_service.dart';
 import '../../services/push_service.dart';
+import '../../services/store_api.dart';
 import '../../services/store_repository.dart';
 import '../../widgets/product_grid.dart';
 import '../../widgets/product_image.dart';
 import '../account/my_orders_screen.dart';
+import '../account/order_details_screen.dart';
 import 'content_editors.dart';
+import 'loyalty_admin.dart';
 import 'product_edit_screen.dart';
+import 'reports_tab.dart';
 import 'stats_tab.dart';
 
 /// لوحة التحكم. تنفتح بتبويب الحساب لما صاحب المتجر يسجل دخول.
@@ -50,7 +54,7 @@ class _AdminHomeState extends State<AdminHome> {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 7,
+      length: 11,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('لوحة التحكم'),
@@ -66,10 +70,14 @@ class _AdminHomeState extends State<AdminHome> {
             tabAlignment: TabAlignment.start,
             tabs: [
               Tab(icon: Icon(Icons.receipt_long), text: 'الطلبات'),
+              Tab(icon: Icon(Icons.bar_chart), text: 'التقارير'),
               Tab(icon: Icon(Icons.insights_outlined), text: 'الإحصائيات'),
               Tab(icon: Icon(Icons.inventory_2_outlined), text: 'المنتجات'),
               Tab(icon: Icon(Icons.grid_view_outlined), text: 'الأقسام'),
               Tab(icon: Icon(Icons.view_carousel_outlined), text: 'العروض'),
+              Tab(icon: Icon(Icons.local_offer_outlined), text: 'الكوبونات'),
+              Tab(icon: Icon(Icons.stars_outlined), text: 'الولاء'),
+              Tab(icon: Icon(Icons.auto_awesome), text: 'عروض ذكية'),
               Tab(icon: Icon(Icons.play_circle_outline), text: 'الريلز'),
               Tab(icon: Icon(Icons.storefront_outlined), text: 'المتجر'),
             ],
@@ -77,10 +85,14 @@ class _AdminHomeState extends State<AdminHome> {
         ),
         body: const TabBarView(children: [
           _OrdersTab(),
+          ReportsTab(),
           StatsTab(),
           _ProductsTab(),
           _CategoriesTab(),
           _BannersTab(),
+          CouponsTab(),
+          LoyaltySettingsTab(),
+          RecommendationRulesTab(),
           _ReelsTab(),
           StoreInfoEditor(),
         ]),
@@ -237,7 +249,8 @@ class _OrderCard extends StatelessWidget {
       child: ExpansionTile(
         shape: const Border(),
         title: Text(customer.name, style: theme.textTheme.titleMedium),
-        subtitle: Text('${formatPrice(order.total)} • ${formatOrderDate(order.createdAt)}'),
+        subtitle: Text('${formatPrice(order.total)}${order.discount > 0 ? ' (خصم ${formatPrice(order.discount)})' : ''}'
+            ' • ${formatOrderDate(order.createdAt)}'),
         trailing: StatusChip(status: order.status),
         childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
         expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
@@ -309,6 +322,10 @@ class _OrderCard extends StatelessWidget {
                 ]),
               ),
           ],
+          const Divider(),
+          OrderAmounts(order: order),
+          if (!order.pricedByServer)
+            Text('طلب من نسخة قديمة: السعر من التطبيق وبدون نقاط', style: theme.textTheme.bodySmall),
           const SizedBox(height: 12),
           DropdownButtonFormField<OrderStatus>(
             initialValue: order.status,
@@ -318,10 +335,18 @@ class _OrderCard extends StatelessWidget {
             ],
             onChanged: (status) async {
               if (status == null || status == order.status) return;
+              final api = context.read<StoreApi>();
               try {
-                final notifier = context.read<OrderNotifier>();
-                await context.read<StoreRepository>().setOrderStatus(order.id, status);
-                notifier.notifyStatus(order.id);
+                if (api.enabled) {
+                  // السيرفر يغير الحالة ويرسل الإشعار ويضيف النقاط، كلها مرة وحدة.
+                  await api.setOrderStatus(order.id, status);
+                } else {
+                  final notifier = context.read<OrderNotifier>();
+                  await context.read<StoreRepository>().setOrderStatus(order.id, status);
+                  notifier.notifyStatus(order.id);
+                }
+              } on StoreApiException catch (e) {
+                if (context.mounted) _showError(context, e.message);
               } catch (_) {
                 if (context.mounted) _showError(context, 'ما كدرنا نغير الحالة');
               }

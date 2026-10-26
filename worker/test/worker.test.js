@@ -3,7 +3,8 @@ import { beforeEach, describe, it } from 'node:test';
 
 import { decodeFields } from '../src/firestore.js';
 import { clearTokenCache, signJwt } from '../src/google.js';
-import worker, { MAX_ORDER_AGE_MS, parseServiceAccount } from '../src/index.js';
+import { MAX_ORDER_AGE_MS } from '../src/config.js';
+import worker, { parseServiceAccount } from '../src/index.js';
 import { buildMessage, formatBaghdadTime, formatPrice } from '../src/telegram.js';
 
 const PROJECT = 'demo-lacasa';

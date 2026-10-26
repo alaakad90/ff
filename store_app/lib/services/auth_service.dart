@@ -43,6 +43,9 @@ abstract class AuthService {
   /// يرجع false إذا الزبون سكر نافذة آبل.
   Future<bool> signInWithApple();
 
+  /// توكن Firebase للسيرفر (يثبت منو الزبون). null إذا زائر.
+  Future<String?> idToken({bool forceRefresh = false});
+
   /// يحذف الحساب ومعلوماته المحفوظة. يتأكد من صاحب الحساب أول:
   /// بالباسورد [password]، أو بنافذة كوكل/آبل. يرجع false إذا سكرها.
   Future<bool> deleteAccount({String? password});
@@ -103,6 +106,17 @@ class FirebaseAuthService implements AuthService {
       return await action();
     } on FirebaseAuthException catch (e) {
       throw AuthException(authErrorMessage(e.code));
+    }
+  }
+
+  @override
+  Future<String?> idToken({bool forceRefresh = false}) async {
+    final user = _auth.currentUser;
+    if (user == null) return null;
+    try {
+      return await user.getIdToken(forceRefresh);
+    } catch (_) {
+      return null;
     }
   }
 

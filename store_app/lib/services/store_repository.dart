@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/content.dart';
+import '../models/loyalty.dart';
 import '../models/order.dart';
 import '../models/product.dart';
 import '../models/stats.dart';
@@ -44,6 +45,33 @@ abstract class StoreRepository {
 
   /// موبايلات صاحب المتجر، حتى يوصلها إشعار من يجي طلب جديد.
   Future<void> registerAdminDevice(String userId, String token);
+
+  /// المنتجات بأرقامها (حتى المخفية)، لإعادة الطلب: الأسعار الحالية والتوفر.
+  Future<List<Product>> getProducts(Iterable<String> ids);
+
+  /// طلبات من تاريخ معين (للتقارير).
+  Stream<List<StoreOrder>> watchOrdersSince(DateTime from);
+
+  // ───── الولاء ─────
+  Stream<LoyaltySettings> watchLoyalty();
+  Future<void> saveLoyalty(LoyaltySettings settings);
+
+  /// هل الطلب المباشر من النسخ القديمة مسموح (settings/orders).
+  Stream<bool> watchLegacyOrdersAllowed();
+  Future<void> setLegacyOrdersAllowed(bool allowed);
+
+  Stream<Wallet> watchWallet(String userId);
+  Stream<List<LedgerEntry>> watchLedger(String userId);
+  Stream<List<Coupon>> watchMyCoupons(String userId);
+  Stream<Referral?> watchReferral(String userId);
+  Stream<List<Referral>> watchInvites(String userId);
+
+  /// المدير: كل الكوبونات. ما نحذف كوبونات، بس نوقفها (حتى تبقى بالتقارير).
+  Stream<List<Coupon>> watchCoupons();
+  Future<void> saveCoupon(Coupon coupon, {required bool isNew});
+
+  Stream<List<RecommendationRule>> watchRecommendationRules({bool includeHidden = false});
+  Future<void> saveRecommendationRule(RecommendationRule rule);
 }
 
 List<Product> _sortProducts(Iterable<Product> items) =>
@@ -67,6 +95,18 @@ StoreOrder _orderFromMap(String id, Map<String, dynamic> data) => StoreOrder(
       userId: data['userId'] as String? ?? '',
       status: OrderStatus.fromValue(data['status'] as String?),
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
+      subtotal: (data['subtotal'] as num?)?.toInt(),
+      couponCode: (data['coupon'] as Map?)?['code'] as String? ?? '',
+      couponAmount: ((data['coupon'] as Map?)?['amount'] as num?)?.toInt() ?? 0,
+      pointsUsed: (data['pointsUsed'] as num?)?.toInt() ?? 0,
+      pointsDiscount: (data['pointsDiscount'] as num?)?.toInt() ?? 0,
+      pointsEarned: (data['pointsEarned'] as num?)?.toInt() ?? 0,
+      statusHistory: [
+        for (final e in data['statusHistory'] as List? ?? const [])
+          if (e is Map)
+            StatusEvent(OrderStatus.fromValue(e['status'] as String?), (e['at'] as Timestamp?)?.toDate()),
+      ],
+      pricedByServer: data['pricedBy'] == 'server',
     );
 
 class FirestoreStoreRepository implements StoreRepository {
@@ -253,6 +293,99 @@ class FirestoreStoreRepository implements StoreRepository {
   Future<void> registerAdminDevice(String userId, String token) => _col('adminDevices')
       .doc(token)
       .set({'uid': userId, 'updatedAt': FieldValue.serverTimestamp()});
+
+  @override
+  Future<List<Product>> getProducts(Iterable<String> ids) async {
+    final unique = ids.where((id) => id.isNotEmpty).toSet().toList();
+    final docs = await Future.wait(unique.map((id) => _col('products').doc(id).get()));
+    return [for (final d in docs) if (d.exists) Product.fromMap(d.id, d.data()!)];
+  }
+
+  @override
+  Stream<List<StoreOrder>> watchOrdersSince(DateTime from) => _col('orders')
+      .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(from))
+      .orderBy('createdAt', descending: true)
+      .limit(2000)
+      .snapshots()
+      .map((s) => s.docs.map((d) => _orderFromMap(d.id, d.data())).toList());
+
+  @override
+  Stream<LoyaltySettings> watchLoyalty() => _col('settings')
+      .doc('loyalty')
+      .snapshots()
+      .map((d) => LoyaltySettings.fromMap(d.data() ?? const {}));
+
+  @override
+  Future<void> saveLoyalty(LoyaltySettings settings) => _col('settings').doc('loyalty').set(settings.toMap());
+
+  @override
+  Stream<bool> watchLegacyOrdersAllowed() => _col('settings')
+      .doc('orders')
+      .snapshots()
+      .map((d) => d.data()?['legacyClientOrders'] as bool? ?? true);
+
+  @override
+  Future<void> setLegacyOrdersAllowed(bool allowed) =>
+      _col('settings').doc('orders').set({'legacyClientOrders': allowed}, SetOptions(merge: true));
+
+  @override
+  Stream<Wallet> watchWallet(String userId) =>
+      _col('wallets').doc(userId).snapshots().map((d) => Wallet.fromMap(d.data() ?? const {}));
+
+  @override
+  Stream<List<LedgerEntry>> watchLedger(String userId) => _col('wallets')
+      .doc(userId)
+      .collection('ledger')
+      .orderBy('createdAt', descending: true)
+      .limit(100)
+      .snapshots()
+      .map((s) => s.docs.map((d) => LedgerEntry.fromMap(d.id, d.data())).toList());
+
+  @override
+  Stream<List<Coupon>> watchMyCoupons(String userId) => _col('coupons')
+      .where('assignedTo', isEqualTo: userId)
+      .snapshots()
+      .map((s) => s.docs.map((d) => Coupon.fromMap(d.id, d.data())).toList());
+
+  @override
+  Stream<Referral?> watchReferral(String userId) => _col('referrals')
+      .doc(userId)
+      .snapshots()
+      .map((d) => d.exists ? Referral.fromMap(d.id, d.data()!) : null);
+
+  @override
+  Stream<List<Referral>> watchInvites(String userId) => _col('referrals')
+      .where('referrerUid', isEqualTo: userId)
+      .snapshots()
+      .map((s) => s.docs.map((d) => Referral.fromMap(d.id, d.data())).toList());
+
+  @override
+  Stream<List<Coupon>> watchCoupons() => _col('coupons')
+      .snapshots()
+      .map((s) => s.docs.map((d) => Coupon.fromMap(d.id, d.data())).toList()..sort((a, b) => a.code.compareTo(b.code)));
+
+  @override
+  Future<void> saveCoupon(Coupon coupon, {required bool isNew}) {
+    final doc = _col('coupons').doc(coupon.code);
+    final data = {...coupon.toMap(), 'updatedAt': FieldValue.serverTimestamp()};
+    if (isNew) return doc.set({...data, 'usedCount': 0, 'createdAt': FieldValue.serverTimestamp()});
+    // التعديل ما يلمس usedCount. الحقول المحذوفة (مثل تاريخ الانتهاء) تنشال.
+    return doc.update({
+      ...data,
+      if (coupon.startsAt == null) 'startsAt': FieldValue.delete(),
+      if (coupon.endsAt == null) 'endsAt': FieldValue.delete(),
+      if (coupon.assignedTo.isEmpty) 'assignedTo': FieldValue.delete(),
+    });
+  }
+
+  @override
+  Stream<List<RecommendationRule>> watchRecommendationRules({bool includeHidden = false}) =>
+      _watch('recommendationRules', RecommendationRule.fromMap, activeOnly: !includeHidden)
+          .map((l) => _sortByOrder(l, (r) => r.order));
+
+  @override
+  Future<void> saveRecommendationRule(RecommendationRule rule) =>
+      _save('recommendationRules', rule.id, rule.toMap());
 }
 
 /// نسخة بالذاكرة للاختبارات.
@@ -431,4 +564,84 @@ class InMemoryStoreRepository implements StoreRepository {
 
   @override
   Future<void> registerAdminDevice(String userId, String token) async => adminDevices[token] = userId;
+
+  @override
+  Future<List<Product>> getProducts(Iterable<String> ids) async =>
+      [for (final id in ids.toSet()) ?_products[id]];
+
+  @override
+  Stream<List<StoreOrder>> watchOrdersSince(DateTime from) => _watch(() =>
+      _newestFirst(_orders.values.where((o) => o.createdAt == null || !o.createdAt!.isBefore(from))));
+
+  var loyalty = const LoyaltySettings();
+  var legacyOrdersAllowed = true;
+  final wallets = <String, Wallet>{};
+  final ledgers = <String, List<LedgerEntry>>{};
+  final coupons = <String, Coupon>{};
+  final referrals = <String, Referral>{};
+  final rules = <String, RecommendationRule>{};
+
+  /// للاختبارات: طلب بكل تفاصيله (مثل اللي يكتبه السيرفر).
+  Future<void> putOrder(StoreOrder order) {
+    _orders[order.id] = order;
+    return _changed();
+  }
+
+  @override
+  Stream<LoyaltySettings> watchLoyalty() => _watch(() => loyalty);
+
+  @override
+  Future<void> saveLoyalty(LoyaltySettings settings) {
+    loyalty = settings;
+    return _changed();
+  }
+
+  @override
+  Stream<bool> watchLegacyOrdersAllowed() => _watch(() => legacyOrdersAllowed);
+
+  @override
+  Future<void> setLegacyOrdersAllowed(bool allowed) {
+    legacyOrdersAllowed = allowed;
+    return _changed();
+  }
+
+  @override
+  Stream<Wallet> watchWallet(String userId) => _watch(() => wallets[userId] ?? const Wallet());
+
+  @override
+  Stream<List<LedgerEntry>> watchLedger(String userId) => _watch(() => ledgers[userId] ?? const []);
+
+  @override
+  Stream<List<Coupon>> watchMyCoupons(String userId) =>
+      _watch(() => coupons.values.where((c) => c.assignedTo == userId).toList());
+
+  @override
+  Stream<Referral?> watchReferral(String userId) => _watch(() => referrals[userId]);
+
+  @override
+  Stream<List<Referral>> watchInvites(String userId) =>
+      _watch(() => referrals.values.where((r) => r.referrerUid == userId).toList());
+
+  @override
+  Stream<List<Coupon>> watchCoupons() =>
+      _watch(() => coupons.values.toList()..sort((a, b) => a.code.compareTo(b.code)));
+
+  @override
+  Future<void> saveCoupon(Coupon coupon, {required bool isNew}) {
+    final old = coupons[coupon.code];
+    if (isNew && old != null) throw StateError('exists');
+    coupons[coupon.code] = Coupon.fromMap(coupon.code, {...coupon.toMap(), 'usedCount': old?.usedCount ?? 0});
+    return _changed();
+  }
+
+  @override
+  Stream<List<RecommendationRule>> watchRecommendationRules({bool includeHidden = false}) => _watch(
+      () => _sortByOrder(rules.values.where((r) => includeHidden || r.active), (r) => r.order));
+
+  @override
+  Future<void> saveRecommendationRule(RecommendationRule rule) {
+    final id = rule.id.isEmpty ? _newId('rule') : rule.id;
+    rules[id] = rule.copyWith(id: id);
+    return _changed();
+  }
 }

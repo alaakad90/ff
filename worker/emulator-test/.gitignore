@@ -1,0 +1,4 @@
+node_modules/
+# نسخة من store_app/firestore.rules تنسخ وقت الاختبار.
+firestore.rules
+*.log

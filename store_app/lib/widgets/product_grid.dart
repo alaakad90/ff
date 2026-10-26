@@ -41,8 +41,10 @@ class SliverProductGrid extends StatelessWidget {
 
 class ProductCard extends StatelessWidget {
   final Product product;
+  // بالعروض الذكية نفس المنتج ممكن يبين مرتين بنفس الصفحة، فبلا Hero هناك.
+  final bool hero;
 
-  const ProductCard({super.key, required this.product});
+  const ProductCard({super.key, required this.product, this.hero = true});
 
   @override
   Widget build(BuildContext context) {
@@ -57,7 +59,7 @@ class ProductCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(child: ProductImage(product: product, hero: true)),
+            Expanded(child: ProductImage(product: product, hero: hero)),
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
               child: Text(

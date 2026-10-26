@@ -6,7 +6,9 @@ import '../../services/auth_service.dart';
 import '../../services/store_repository.dart';
 import '../about_screen.dart';
 import '../admin/admin_home.dart';
+import 'guest_orders_screen.dart';
 import 'my_orders_screen.dart';
+import 'wallet_screen.dart';
 
 /// تبويب الحساب. إذا اللي داخل مدير، تنفتح لوحة التحكم مباشرة.
 class AccountScreen extends StatelessWidget {
@@ -39,11 +41,23 @@ class _GuestAccount extends StatelessWidget {
           const AuthForm(),
           const SizedBox(height: 24),
           Card(
-            child: ListTile(
-              leading: const Icon(Icons.storefront_outlined),
-              title: const Text('عن المتجر'),
-              trailing: const Icon(Icons.chevron_left),
-              onTap: () => _push(context, const AboutScreen()),
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.local_shipping_outlined),
+                  title: const Text('تتبع طلباتي'),
+                  subtitle: const Text('الطلبات اللي سويتها من هذا الجهاز بدون حساب'),
+                  trailing: const Icon(Icons.chevron_left),
+                  onTap: () => _push(context, const GuestOrdersScreen()),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.storefront_outlined),
+                  title: const Text('عن المتجر'),
+                  trailing: const Icon(Icons.chevron_left),
+                  onTap: () => _push(context, const AboutScreen()),
+                ),
+              ],
             ),
           ),
         ],
@@ -98,6 +112,14 @@ class _CustomerAccount extends StatelessWidget {
                   title: const Text('طلباتي'),
                   trailing: const Icon(Icons.chevron_left),
                   onTap: () => _push(context, MyOrdersScreen(userId: session.uid)),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.account_balance_wallet_outlined),
+                  title: const Text('محفظتي ونقاطي'),
+                  subtitle: const Text('النقاط، كوبوناتي، وادعُ صديق'),
+                  trailing: const Icon(Icons.chevron_left),
+                  onTap: () => _push(context, WalletScreen(userId: session.uid)),
                 ),
                 const Divider(height: 1),
                 ListTile(

@@ -10,10 +10,12 @@ import 'models/content.dart';
 import 'screens/shell.dart';
 import 'screens/splash_screen.dart';
 import 'services/auth_service.dart';
+import 'services/device_history.dart';
 import 'services/media_uploader.dart';
 import 'services/note_attachments.dart';
 import 'services/order_service.dart';
 import 'services/push_service.dart';
+import 'services/store_api.dart';
 import 'services/store_repository.dart';
 import 'services/visit_tracker.dart';
 import 'state/cart.dart';
@@ -52,6 +54,8 @@ class StoreApp extends StatelessWidget {
   final MediaUploader? uploader;
   final PushService? push;
   final NoteAttachments? attachments;
+  final StoreApi? api;
+  final DeviceHistory? history;
   final bool showSplash;
 
   const StoreApp({
@@ -62,6 +66,8 @@ class StoreApp extends StatelessWidget {
     this.uploader,
     this.push,
     this.attachments,
+    this.api,
+    this.history,
     this.showSplash = true,
   });
 
@@ -75,6 +81,8 @@ class StoreApp extends StatelessWidget {
         Provider<MediaUploader>.value(value: uploader ?? SupabaseUploader()),
         Provider.value(value: push ?? const PushService()),
         Provider<NoteAttachments>.value(value: attachments ?? SupabaseNoteAttachments()),
+        Provider<StoreApi>.value(value: api ?? HttpStoreApi(auth)),
+        Provider<DeviceHistory>.value(value: history ?? const PrefsDeviceHistory()),
         ChangeNotifierProvider(create: (_) => Cart()),
         StreamProvider<Session>(
           create: (_) => auth.watchSession(),

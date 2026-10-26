@@ -113,16 +113,91 @@ service cloud.firestore {
         && request.resource.data.updatedAt == request.time;
     }
 
+    // الطلب المباشر من التطبيق (النسخ القديمة). النسخة الجديدة تطلب عن طريق السيرفر
+    // (/api/orders) اللي يحسب الأسعار والخصومات بنفسه. صاحب المتجر يكدر يوقف الطريق القديم
+    // من لوحة التحكم (settings/orders.legacyClientOrders = false) بعد ما الكل يحدّث التطبيق.
+    function legacyOrdersAllowed() {
+      return !exists(/databases/$(database)/documents/settings/orders)
+        || get(/databases/$(database)/documents/settings/orders).data.get('legacyClientOrders', true) == true;
+    }
+
     match /orders/{orderId} {
-      allow create: if validNewOrder(request.resource.data);
+      allow create: if legacyOrdersAllowed() && validNewOrder(request.resource.data);
       // الزبون يشوف طلباته بس، والمدير يشوف الكل.
       allow read: if isAdmin()
         || (request.auth != null && resource.data.get('userId', '') == request.auth.uid);
       allow delete: if isAdmin();
-      // المدير يغير الحالة بس.
+      // المدير يغير الحالة بس. طلب السيرفر الملغي ما يرجع (النقاط والكوبون رجعت للزبون).
       allow update: if isAdmin()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
-        && request.resource.data.status in ['new', 'confirmed', 'delivering', 'done', 'cancelled'];
+        && request.resource.data.status in ['new', 'confirmed', 'delivering', 'done', 'cancelled']
+        && !(resource.data.get('pricedBy', '') == 'server' && resource.data.status == 'cancelled');
+    }
+
+    // ───── الكوبونات والولاء والدعوات ─────
+    // الأرصدة واستعمال الكوبونات والدعوات يكتبها السيرفر بس (بمفتاح الخدمة)،
+    // حتى محد يكدر يضيف نقاط لنفسه أو يصفّر عداد كوبون من التطبيق.
+
+    function validCoupon(c) {
+      return c.keys().hasOnly(['description', 'type', 'value', 'minSubtotal', 'maxDiscount', 'startsAt', 'endsAt',
+                               'usageLimit', 'perUserLimit', 'usedCount', 'active', 'assignedTo', 'firstOrderOnly',
+                               'createdAt', 'updatedAt'])
+        && c.type in ['percent', 'fixed']
+        && c.value is int && c.value > 0
+        && (c.type == 'fixed' || c.value <= 100)
+        && c.get('minSubtotal', 0) is int && c.get('minSubtotal', 0) >= 0
+        && c.get('maxDiscount', 0) is int && c.get('maxDiscount', 0) >= 0
+        && c.get('usageLimit', 0) is int && c.get('usageLimit', 0) >= 0
+        && c.get('perUserLimit', 1) is int && c.get('perUserLimit', 1) >= 0
+        && c.active is bool
+        && isText(c.get('description', ''), 0, 200)
+        && isText(c.get('assignedTo', ''), 0, 128)
+        && (!('startsAt' in c) || c.startsAt is timestamp)
+        && (!('endsAt' in c) || c.endsAt is timestamp);
+    }
+
+    match /coupons/{code} {
+      // الزبون يشوف بس الكوبونات المخصصة إله (بمحفظته). الكوبونات العامة سرية، وتنفحص بالسيرفر.
+      allow read: if isAdmin()
+        || (request.auth != null && resource.data.get('assignedTo', '') == request.auth.uid);
+      allow create: if isAdmin() && code.matches('^[A-Z0-9_-]{3,24}$')
+        && validCoupon(request.resource.data) && request.resource.data.get('usedCount', 0) == 0;
+      // عداد الاستعمال يغيره السيرفر بس.
+      allow update: if isAdmin() && validCoupon(request.resource.data)
+        && request.resource.data.get('usedCount', 0) == resource.data.get('usedCount', 0);
+      allow delete: if false;
+
+      match /uses/{who} {
+        allow read: if isAdmin();
+        allow write: if false;
+      }
+    }
+
+    match /wallets/{uid} {
+      allow read: if isAdmin() || (request.auth != null && request.auth.uid == uid);
+      allow write: if false;
+
+      match /ledger/{entry} {
+        allow read: if isAdmin() || (request.auth != null && request.auth.uid == uid);
+        allow write: if false;
+      }
+    }
+
+    match /referrals/{uid} {
+      allow read: if isAdmin() || (request.auth != null
+        && (request.auth.uid == uid || resource.data.referrerUid == request.auth.uid));
+      allow write: if false;
+    }
+
+    match /referralCodes/{code} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // العروض الذكية: "اللي يطلب كذا تبينله كذا". الكل يقرا، المدير بس يعدل.
+    match /recommendationRules/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
     }
   }
 }
