@@ -44,11 +44,11 @@ class _StatsTabState extends State<StatsTab> {
               }
               final v = snapshot.data;
               String n(int Function(VisitorStats) f) => v == null ? '…' : '${f(v)}';
-              return _Grid(children: [
-                _StatCard(icon: Icons.today, label: 'زوار اليوم', value: n((v) => v.today)),
-                _StatCard(icon: Icons.date_range, label: 'زوار آخر 7 أيام', value: n((v) => v.week)),
-                _StatCard(icon: Icons.devices, label: 'كل الأجهزة', value: n((v) => v.devices)),
-                _StatCard(icon: Icons.person_outline, label: 'الحسابات المسجلة', value: n((v) => v.members)),
+              return StatGrid(children: [
+                StatCard(icon: Icons.today, label: 'زوار اليوم', value: n((v) => v.today)),
+                StatCard(icon: Icons.date_range, label: 'زوار آخر 7 أيام', value: n((v) => v.week)),
+                StatCard(icon: Icons.devices, label: 'كل الأجهزة', value: n((v) => v.devices)),
+                StatCard(icon: Icons.person_outline, label: 'الحسابات المسجلة', value: n((v) => v.members)),
               ]);
             },
           ),
@@ -81,22 +81,22 @@ class _OrderStatsView extends StatelessWidget {
       children: [
         Text('الطلبات', style: theme.textTheme.titleMedium),
         const SizedBox(height: 8),
-        _Grid(children: [
-          _StatCard(icon: Icons.receipt_long, label: 'طلبات اليوم', value: '${stats.today}'),
-          _StatCard(icon: Icons.date_range, label: 'آخر 7 أيام', value: '${stats.week}'),
-          _StatCard(icon: Icons.calendar_month, label: 'هذا الشهر', value: '${stats.month}'),
-          _StatCard(icon: Icons.all_inbox, label: 'كل الطلبات', value: '${stats.total}'),
-          _StatCard(icon: Icons.payments_outlined, label: 'مبيعات مسلّمة', value: formatPrice(stats.delivered)),
-          _StatCard(icon: Icons.trending_up, label: 'كل المبيعات (بدون الملغية)', value: formatPrice(stats.expected)),
-          _StatCard(icon: Icons.shopping_basket_outlined, label: 'معدل الطلب', value: formatPrice(stats.average)),
-          _StatCard(icon: Icons.groups_outlined, label: 'زبائن طلبوا', value: '${stats.customers}'),
+        StatGrid(children: [
+          StatCard(icon: Icons.receipt_long, label: 'طلبات اليوم', value: '${stats.today}'),
+          StatCard(icon: Icons.date_range, label: 'آخر 7 أيام', value: '${stats.week}'),
+          StatCard(icon: Icons.calendar_month, label: 'هذا الشهر', value: '${stats.month}'),
+          StatCard(icon: Icons.all_inbox, label: 'كل الطلبات', value: '${stats.total}'),
+          StatCard(icon: Icons.payments_outlined, label: 'مبيعات مسلّمة', value: formatPrice(stats.delivered)),
+          StatCard(icon: Icons.trending_up, label: 'كل المبيعات (بدون الملغية)', value: formatPrice(stats.expected)),
+          StatCard(icon: Icons.shopping_basket_outlined, label: 'معدل الطلب', value: formatPrice(stats.average)),
+          StatCard(icon: Icons.groups_outlined, label: 'زبائن طلبوا', value: '${stats.customers}'),
         ]),
         const SizedBox(height: 16),
-        _Section(
+        StatSection(
           title: 'الطلبات آخر 7 أيام',
           child: _DaysChart(counts: stats.lastSevenDays),
         ),
-        _Section(
+        StatSection(
           title: 'حسب الحالة',
           child: Column(
             children: [
@@ -112,7 +112,7 @@ class _OrderStatsView extends StatelessWidget {
             ],
           ),
         ),
-        _Section(
+        StatSection(
           title: 'أكثر المنتجات طلباً',
           child: stats.topProducts.isEmpty
               ? const Text('ماكو طلبات بعد')
@@ -139,10 +139,10 @@ class _OrderStatsView extends StatelessWidget {
   }
 }
 
-class _Grid extends StatelessWidget {
+class StatGrid extends StatelessWidget {
   final List<Widget> children;
 
-  const _Grid({required this.children});
+  const StatGrid({super.key, required this.children});
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -157,12 +157,12 @@ class _Grid extends StatelessWidget {
       );
 }
 
-class _StatCard extends StatelessWidget {
+class StatCard extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
 
-  const _StatCard({required this.icon, required this.label, required this.value});
+  const StatCard({super.key, required this.icon, required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -189,11 +189,11 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-class _Section extends StatelessWidget {
+class StatSection extends StatelessWidget {
   final String title;
   final Widget child;
 
-  const _Section({required this.title, required this.child});
+  const StatSection({super.key, required this.title, required this.child});
 
   @override
   Widget build(BuildContext context) => Card(

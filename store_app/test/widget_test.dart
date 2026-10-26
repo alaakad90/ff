@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
@@ -8,206 +7,23 @@ import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:lacasa_store/data/catalog.dart';
-import 'package:lacasa_store/main.dart';
 import 'package:lacasa_store/models/content.dart';
 import 'package:lacasa_store/models/order.dart';
 import 'package:lacasa_store/models/product.dart';
 import 'package:lacasa_store/models/stats.dart';
 import 'package:lacasa_store/screens/admin/stats_tab.dart';
 import 'package:lacasa_store/screens/search_screen.dart';
-import 'package:lacasa_store/services/auth_service.dart';
 import 'package:lacasa_store/services/contact.dart';
 import 'package:lacasa_store/services/instagram.dart';
 import 'package:lacasa_store/services/media_uploader.dart';
 import 'package:lacasa_store/services/note_attachments.dart';
 import 'package:lacasa_store/services/order_service.dart';
-import 'package:lacasa_store/services/push_service.dart';
 import 'package:lacasa_store/services/store_repository.dart';
 import 'package:lacasa_store/services/visit_tracker.dart';
 import 'package:lacasa_store/state/cart.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// حسابات وهمية: الباسورد لازم يكون "secret".
-class FakeAuthService implements AuthService {
-  final _session = StreamController<Session>.broadcast();
-  final Set<String> adminEmails;
-  Session current;
-  var _nextUid = 1;
-
-  FakeAuthService({this.current = Session.guest, this.adminEmails = const {}});
-
-  void _emit(Session s) {
-    current = s;
-    _session.add(s);
-  }
-
-  @override
-  Stream<Session> watchSession() async* {
-    yield current;
-    yield* _session.stream;
-  }
-
-  @override
-  Future<void> signIn(String email, String password) async {
-    if (password != 'secret') throw AuthException('الإيميل أو الباسورد غلط');
-    final role = adminEmails.contains(email) ? Role.admin : Role.customer;
-    _emit(Session(role, uid: 'u-$email', email: email, usesPassword: true));
-  }
-
-  @override
-  Future<String> signUp(String name, String email, String password) async {
-    final uid = 'new${_nextUid++}';
-    _emit(Session(Role.customer, uid: uid, email: email, name: name, usesPassword: true));
-    return uid;
-  }
-
-  @override
-  Future<void> sendPasswordReset(String email) async {}
-
-  @override
-  Future<void> signOut() async => _emit(Session.guest);
-
-  @override
-  bool supportsGoogle = false;
-
-  /// null يعني الزبون سكر نافذة كوكل.
-  String? googleName = 'حسين';
-
-  @override
-  Future<bool> signInWithGoogle() async {
-    if (googleName == null) return false;
-    _emit(Session(Role.customer, uid: 'g1', email: 'g@gmail.com', name: googleName!));
-    return true;
-  }
-
-  @override
-  bool supportsApple = false;
-
-  @override
-  Future<bool> signInWithApple() async {
-    _emit(const Session(Role.customer, uid: 'a1', email: 'x@privaterelay.appleid.com'));
-    return true;
-  }
-
-  final deleted = <String>[];
-
-  @override
-  Future<bool> deleteAccount({String? password}) async {
-    if (current.usesPassword && password != 'secret') throw AuthException('الإيميل أو الباسورد غلط');
-    deleted.add(current.uid);
-    _emit(Session.guest);
-    return true;
-  }
-}
-
-class RecordingNotifier extends OrderNotifier {
-  final sent = <StoreOrder>[];
-  final statusChanges = <String>[];
-
-  @override
-  Future<void> notify(StoreOrder order) async => sent.add(order);
-
-  @override
-  Future<void> notifyStatus(String orderId) async => statusChanges.add(orderId);
-}
-
-class FakeAttachments implements NoteAttachments {
-  bool recording = false;
-  final bool micAllowed;
-
-  FakeAttachments({this.micAllowed = true});
-
-  @override
-  bool get enabled => true;
-
-  @override
-  bool get supportsVoice => true;
-
-  @override
-  Future<String?> pickImage({required bool camera}) async => 'https://cdn.example/notes/u/1-a.jpg';
-
-  @override
-  Future<bool> startRecording() async => recording = micAllowed;
-
-  @override
-  Future<String?> stopRecording() async {
-    recording = false;
-    return 'https://cdn.example/notes/u/2-b.m4a';
-  }
-
-  @override
-  Future<void> cancelRecording() async => recording = false;
-}
-
-class FakePush extends PushService {
-  final String token;
-  int asked = 0;
-
-  FakePush([this.token = '']);
-
-  @override
-  Future<String> deviceToken() async {
-    asked++;
-    return token;
-  }
-}
-
-class FakeUploader implements MediaUploader {
-  @override
-  bool enabled;
-
-  /// الرابط اللي يرجعه، أو null كأن صاحب المتجر سكر المعرض.
-  String? result;
-  final picked = <MediaKind>[];
-
-  FakeUploader({this.enabled = false, this.result});
-
-  @override
-  Future<String?> pickAndUpload(MediaKind kind) async {
-    picked.add(kind);
-    return result;
-  }
-}
-
-Product sample(int i) => sampleProducts[i];
-
-Widget app(
-  StoreRepository repo, {
-  AuthService? auth,
-  OrderNotifier? notifier,
-  MediaUploader? uploader,
-  PushService? push,
-  NoteAttachments? attachments,
-  bool showSplash = false,
-}) =>
-    StoreApp(
-      repository: repo,
-      auth: auth ?? FakeAuthService(),
-      notifier: notifier ?? RecordingNotifier(),
-      uploader: uploader ?? FakeUploader(),
-      push: push ?? FakePush(),
-      attachments: attachments ?? FakeAttachments(),
-      showSplash: showSplash,
-    );
-
-/// تبويبات لوحة التحكم تتمرر، فنخلي التبويب يبين قبل ما ندوس عليه.
-Future<void> tapAdminTab(WidgetTester tester, String label) async {
-  final tab = find.widgetWithText(Tab, label);
-  await tester.ensureVisible(tab);
-  await tester.pumpAndSettle();
-  await tester.tap(tab);
-}
-
-void usePhoneSize(WidgetTester tester) {
-  tester.view.physicalSize = const Size(1170, 2532);
-  tester.view.devicePixelRatio = 3;
-  addTearDown(tester.view.reset);
-}
-
-Future<void> tapTab(WidgetTester tester, String label) async {
-  await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text(label)));
-  await tester.pumpAndSettle();
-}
+import 'fakes.dart';
 
 void main() {
   test('formatPrice adds thousands separators', () {

@@ -117,6 +117,17 @@ class OrderItem {
       };
 }
 
+/// مرحلة من مراحل الطلب ووقتها (للمتابعة).
+class StatusEvent {
+  final OrderStatus status;
+  final DateTime? at;
+
+  const StatusEvent(this.status, this.at);
+}
+
+/// مراحل الطلب بالترتيب، للمتابعة.
+const orderSteps = [OrderStatus.pending, OrderStatus.confirmed, OrderStatus.delivering, OrderStatus.done];
+
 class StoreOrder {
   final String id;
   final Customer customer;
@@ -128,6 +139,15 @@ class StoreOrder {
   final OrderStatus status;
   final DateTime? createdAt;
   final String pushToken; // توكن تليفون الزبون للإشعارات (ينكتب بس، ما ينقرا)
+  // الحقول الجاية يكتبها السيرفر (طلبات النسخة الجديدة).
+  final int subtotal; // قبل الخصم
+  final String couponCode;
+  final int couponAmount;
+  final int pointsUsed;
+  final int pointsDiscount;
+  final int pointsEarned; // بعد التسليم
+  final List<StatusEvent> statusHistory;
+  final bool pricedByServer;
 
   const StoreOrder({
     this.id = '',
@@ -140,7 +160,22 @@ class StoreOrder {
     this.status = OrderStatus.pending,
     this.createdAt,
     this.pushToken = '',
-  });
+    int? subtotal,
+    this.couponCode = '',
+    this.couponAmount = 0,
+    this.pointsUsed = 0,
+    this.pointsDiscount = 0,
+    this.pointsEarned = 0,
+    this.statusHistory = const [],
+    this.pricedByServer = false,
+  }) : subtotal = subtotal ?? total;
+
+  int get discount => couponAmount + pointsDiscount;
+
+  /// وقت وصول الطلب لكل مرحلة (آخر مرة).
+  DateTime? reachedAt(OrderStatus status) =>
+      statusHistory.lastWhere((e) => e.status == status, orElse: () => StatusEvent(status, null)).at ??
+      (status == OrderStatus.pending ? createdAt : null);
 
   factory StoreOrder.fromCart(
     Customer customer,
@@ -160,20 +195,16 @@ class StoreOrder {
         pushToken: pushToken,
       );
 
-  StoreOrder copyWithPushToken(String token) => StoreOrder(
-        id: id,
-        customer: customer,
-        items: items,
-        total: total,
-        deliveryDay: deliveryDay,
-        pickupMethod: pickupMethod,
-        userId: userId,
-        status: status,
-        createdAt: createdAt,
-        pushToken: token,
-      );
+  StoreOrder copyWithPushToken(String token) => copyWith(pushToken: token);
 
-  StoreOrder copyWith({String? id, OrderStatus? status, DateTime? createdAt}) => StoreOrder(
+  StoreOrder copyWith({
+    String? id,
+    OrderStatus? status,
+    DateTime? createdAt,
+    String? pushToken,
+    List<StatusEvent>? statusHistory,
+  }) =>
+      StoreOrder(
         id: id ?? this.id,
         customer: customer,
         items: items,
@@ -183,6 +214,14 @@ class StoreOrder {
         userId: userId,
         status: status ?? this.status,
         createdAt: createdAt ?? this.createdAt,
-        pushToken: pushToken,
+        pushToken: pushToken ?? this.pushToken,
+        subtotal: subtotal,
+        couponCode: couponCode,
+        couponAmount: couponAmount,
+        pointsUsed: pointsUsed,
+        pointsDiscount: pointsDiscount,
+        pointsEarned: pointsEarned,
+        statusHistory: statusHistory ?? this.statusHistory,
+        pricedByServer: pricedByServer,
       );
 }

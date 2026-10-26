@@ -14,8 +14,9 @@ class AppShell extends StatefulWidget {
   const AppShell({super.key});
 
   /// يبدل للتبويب المطلوب من أي مكان، مثل زر "روح للسلة".
+  /// من صفحة مفتوحة فوك (مثل طلباتي) ماكو AppShell فوقها، فنستعمل النسخة المفتوحة.
   static void goTo(BuildContext context, ShellTab tab) =>
-      context.findAncestorStateOfType<_AppShellState>()?._select(tab.index);
+      (context.findAncestorStateOfType<_AppShellState>() ?? _AppShellState._active)?._select(tab.index);
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -24,8 +25,21 @@ class AppShell extends StatefulWidget {
 enum ShellTab { home, categories, reels, cart, account }
 
 class _AppShellState extends State<AppShell> {
+  static _AppShellState? _active;
   int _index = 0;
   final _visited = <int>{0};
+
+  @override
+  void initState() {
+    super.initState();
+    _active = this;
+  }
+
+  @override
+  void dispose() {
+    if (_active == this) _active = null;
+    super.dispose();
+  }
 
   void _select(int i) => setState(() {
         _index = i;

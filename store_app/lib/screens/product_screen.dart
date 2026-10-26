@@ -9,6 +9,7 @@ import '../widgets/cart_button.dart';
 import '../widgets/note_attachments_field.dart';
 import '../widgets/product_grid.dart';
 import '../widgets/product_image.dart';
+import 'checkout_screen.dart';
 
 class ProductScreen extends StatefulWidget {
   final Product product;
@@ -124,16 +125,40 @@ class _ProductScreenState extends State<ProductScreen> {
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: FilledButton.icon(
-            icon: const Icon(Icons.add_shopping_cart),
-            label: Text('أضف للسلة • ${formatPrice(product.price * _quantity)}'),
-            onPressed: _attaching
-                ? null
-                : () {
-                    context.read<Cart>().add(product, _quantity, _note.text, _imageUrl, _voiceUrl);
-                    Navigator.of(context).pop();
-                    showAddedToCart(context, product);
-                  },
+          child: Row(
+            children: [
+              Expanded(
+                flex: 3,
+                child: FilledButton.icon(
+                  icon: const Icon(Icons.add_shopping_cart),
+                  label: Text('أضف للسلة • ${formatPrice(product.price * _quantity)}'),
+                  onPressed: _attaching
+                      ? null
+                      : () {
+                          context.read<Cart>().add(product, _quantity, _note.text, _imageUrl, _voiceUrl);
+                          Navigator.of(context).pop();
+                          showAddedToCart(context, product);
+                        },
+                ),
+              ),
+              const SizedBox(width: 8),
+              // طلب سريع: هذا المنتج بس، بدون ما يتغير شي بالسلة.
+              Expanded(
+                flex: 2,
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.bolt),
+                  label: const Text('اطلب الآن'),
+                  onPressed: _attaching
+                      ? null
+                      : () => Navigator.of(context).push(MaterialPageRoute(
+                            builder: (_) => CheckoutScreen(items: [
+                              CartItem(product, _quantity,
+                                  note: _note.text.trim(), imageUrl: _imageUrl, voiceUrl: _voiceUrl),
+                            ]),
+                          )),
+                ),
+              ),
+            ],
           ),
         ),
       ),

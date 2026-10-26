@@ -7,6 +7,7 @@ import '../services/store_repository.dart';
 import '../widgets/banner_carousel.dart';
 import '../widgets/product_grid.dart';
 import '../widgets/product_image.dart';
+import '../widgets/smart_offers.dart';
 import 'categories_screen.dart';
 import 'search_screen.dart';
 
@@ -103,6 +104,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ],
+            // عروض ذكية حسب مشتريات الزبون وسلته (ما تبين إذا ماكو شي يناسب).
+            const SliverToBoxAdapter(child: SmartOffers()),
             _SectionTitle(title: 'كل المنتجات'),
             StreamBuilder<List<Product>>(
               stream: _products,

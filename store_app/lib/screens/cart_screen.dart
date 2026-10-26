@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/product.dart';
 import '../state/cart.dart';
 import '../widgets/product_image.dart';
+import '../widgets/smart_offers.dart';
 import 'checkout_screen.dart';
 import 'shell.dart';
 
@@ -41,12 +42,15 @@ class CartScreen extends StatelessWidget {
               ),
             )
           : ListView.separated(
-              padding: const EdgeInsets.all(16),
-              itemCount: cart.items.length,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              // آخر عنصر: عروض تناسب السلة (مثل عقود الزواج ويا بورد الزواج).
+              itemCount: cart.items.length + 1,
               separatorBuilder: (_, _) => const SizedBox(height: 12),
               itemBuilder: (context, i) {
+                if (i == cart.items.length) return const SmartOffers(cartOnly: true);
                 final item = cart.items[i];
                 return Card(
+                  margin: const EdgeInsets.symmetric(horizontal: 16),
                   child: Padding(
                     padding: const EdgeInsets.all(8),
                     child: Row(
