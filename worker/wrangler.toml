@@ -6,6 +6,13 @@ main = "src/index.js"
 compatibility_date = "2025-10-01"
 workers_dev = true
 
+# الدومين الخاص بالمتجر (مسجّل بـ GoDaddy، والـ DNS مالته على Cloudflare).
+# Cloudflare يسوي سجلات الـ DNS وشهادة HTTPS بنفسه وقت النشر.
+routes = [
+  { pattern = "lacasastores.com", custom_domain = true },
+  { pattern = "www.lacasastores.com", custom_domain = true },
+]
+
 # المتجر بالمتصفح: نسخة الويب من التطبيق (Flutter web) تنبني بـ GitHub Actions وتنحط بـ public/.
 # روابط السيرفر تروح للكود أول؛ وأي رابط ثاني يفتح صفحة المتجر.
 [assets]
