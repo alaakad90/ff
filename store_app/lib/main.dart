@@ -113,6 +113,12 @@ class StoreApp extends StatelessWidget {
           GlobalCupertinoLocalizations.delegate,
         ],
         theme: buildTheme(),
+        // كيبورد الأرقام والهاتف بالآيفون ما بيه زر "تم": أي ضغطة برّه الحقل تسكّره.
+        builder: (context, child) => GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+          child: child,
+        ),
         home: showSplash ? const SplashScreen(next: AppShell()) : const AppShell(),
       ),
     );

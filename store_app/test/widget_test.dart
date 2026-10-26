@@ -299,6 +299,34 @@ void main() {
     expect(path, matches(RegExp(r'^notes/uid42/1700000000000-[a-z0-9]{6}\.m4a$')));
   });
 
+  testWidgets('tapping outside a field closes the keyboard (iPhone number pad has no Done key)', (tester) async {
+    usePhoneSize(tester);
+    final repo = InMemoryStoreRepository(products: [sample(0)], categories: sampleCategories);
+    await tester.pumpWidget(app(repo));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('أضف للسلة').first);
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+    await tapTab(tester, 'السلة');
+    await tester.tap(find.text('إكمال الطلب'));
+    await tester.pumpAndSettle();
+
+    final phone = find.byType(TextFormField).at(1);
+    await tester.tap(phone);
+    await tester.pumpAndSettle();
+    expect(tester.testTextInput.isVisible, isTrue);
+    // ضغطة على نص عادي (مو زر ولا حقل).
+    await tester.tap(find.text('طريقة الاستلام'));
+    await tester.pumpAndSettle();
+    expect(tester.testTextInput.isVisible, isFalse);
+    expect(FocusManager.instance.primaryFocus?.context?.widget, isNot(isA<EditableText>()));
+
+    // الضغط على حقل ثاني يبقي الكيبورد مفتوح.
+    await tester.tap(find.byType(TextFormField).at(0));
+    await tester.pumpAndSettle();
+    expect(tester.testTextInput.isVisible, isTrue);
+  });
+
   testWidgets('customer orders with a delivery day', (tester) async {
     usePhoneSize(tester);
     final repo = InMemoryStoreRepository(products: [sample(0), sample(2)], categories: sampleCategories);
