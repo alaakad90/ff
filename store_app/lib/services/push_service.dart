@@ -9,6 +9,8 @@ class PushService {
   /// توكن التليفون، أو نص فارغ إذا الزبون رفض الإشعارات أو صار خطأ.
   /// ما يرمي أخطاء: الطلب يكمل حتى بدون إشعارات.
   Future<String> deviceToken() async {
+    // بالمتصفح ما نرسل إشعارات؛ الطلب يكمل عادي بدونها.
+    if (kIsWeb) return '';
     try {
       final messaging = FirebaseMessaging.instance;
       final settings = await messaging.requestPermission().timeout(const Duration(seconds: 30));

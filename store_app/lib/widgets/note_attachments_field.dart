@@ -185,21 +185,23 @@ class _NoteAttachmentsFieldState extends State<NoteAttachmentsField> {
                       label: const Text('أرفق صورة'),
                     ),
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: widget.voiceUrl.isNotEmpty
-                  ? _Attached(
-                      leading: const Icon(Icons.graphic_eq),
-                      label: 'الفويس',
-                      onOpen: () => openLink(widget.voiceUrl),
-                      onRemove: () => widget.onChanged(imageUrl: widget.imageUrl, voiceUrl: ''),
-                    )
-                  : OutlinedButton.icon(
-                      onPressed: _uploadingVoice ? null : _startRecording,
-                      icon: _uploadingVoice ? const _Spinner() : const Icon(Icons.mic_none),
-                      label: const Text('سجّل فويس'),
-                    ),
-            ),
+            if (_attachments.supportsVoice) ...[
+              const SizedBox(width: 8),
+              Expanded(
+                child: widget.voiceUrl.isNotEmpty
+                    ? _Attached(
+                        leading: const Icon(Icons.graphic_eq),
+                        label: 'الفويس',
+                        onOpen: () => openLink(widget.voiceUrl),
+                        onRemove: () => widget.onChanged(imageUrl: widget.imageUrl, voiceUrl: ''),
+                      )
+                    : OutlinedButton.icon(
+                        onPressed: _uploadingVoice ? null : _startRecording,
+                        icon: _uploadingVoice ? const _Spinner() : const Icon(Icons.mic_none),
+                        label: const Text('سجّل فويس'),
+                      ),
+              ),
+            ],
           ],
         ),
       ],

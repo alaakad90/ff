@@ -121,6 +121,9 @@ class FakeAttachments implements NoteAttachments {
   bool get enabled => true;
 
   @override
+  bool get supportsVoice => true;
+
+  @override
   Future<String?> pickImage({required bool camera}) async => 'https://cdn.example/notes/u/1-a.jpg';
 
   @override

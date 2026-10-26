@@ -7,13 +7,14 @@ import 'package:flutter/foundation.dart';
 
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
+    if (kIsWeb) return web;
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
         return android;
       case TargetPlatform.iOS:
         return ios;
       default:
-        throw UnsupportedError('التطبيق يشتغل على أندرويد وآيفون بس');
+        throw UnsupportedError('التطبيق يشتغل على أندرويد وآيفون والمتصفح بس');
     }
   }
 
@@ -23,6 +24,16 @@ class DefaultFirebaseOptions {
     messagingSenderId: '858636711977',
     projectId: 'lacasa-store-ef68f',
     storageBucket: 'lacasa-store-ef68f.firebasestorage.app',
+  );
+
+  static const web = FirebaseOptions(
+    apiKey: 'AIzaSyDVSij6p1mos-wYZdJtfcmZ-aW2p5iZqdY',
+    appId: '1:858636711977:web:f576b95c4ddd85c922c438',
+    messagingSenderId: '858636711977',
+    projectId: 'lacasa-store-ef68f',
+    authDomain: 'lacasa-store-ef68f.firebaseapp.com',
+    storageBucket: 'lacasa-store-ef68f.firebasestorage.app',
+    measurementId: 'G-45XRW04L7C',
   );
 
   static const ios = FirebaseOptions(
