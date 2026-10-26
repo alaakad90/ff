@@ -1,7 +1,7 @@
-import 'dart:io';
 import 'dart:math';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
@@ -14,6 +14,9 @@ import 'media_uploader.dart';
 /// ينرفع أول ما يختاره، والسلة تحفظ الرابط بس.
 abstract class NoteAttachments {
   bool get enabled;
+
+  /// تسجيل الفويس بالموبايل بس، مو بالمتصفح.
+  bool get supportsVoice;
 
   /// يرجع null إذا الزبون سكر بدون ما يختار.
   Future<String?> pickImage({required bool camera});
@@ -46,6 +49,9 @@ class SupabaseNoteAttachments implements NoteAttachments {
 
   @override
   bool get enabled => supabaseConfigured;
+
+  @override
+  bool get supportsVoice => !kIsWeb;
 
   /// الزبون ممكن ما يكون مسجل دخول، فناخذ له حساب مجهول (Anonymous) بس حتى يرفع.
   Future<(String, String)> _identity() async {
@@ -96,12 +102,7 @@ class SupabaseNoteAttachments implements NoteAttachments {
   Future<String?> stopRecording() async {
     final path = await _recorder?.stop();
     if (path == null) return null;
-    final file = File(path);
-    try {
-      return await _upload(await file.readAsBytes(), 'm4a');
-    } finally {
-      file.delete().ignore();
-    }
+    return _upload(await XFile(path).readAsBytes(), 'm4a');
   }
 
   @override

@@ -13,7 +13,8 @@ const googleWebClientId =
 const googleIosClientId =
     '858636711977-17kd0ivmrgkah405244vmehp9a5np2g2.apps.googleusercontent.com';
 
-bool get googleSignInConfigured => switch (defaultTargetPlatform) {
+/// بالمتصفح Firebase يفتح نافذة كوكل بنفسه، فما يحتاج المعرّفات.
+bool get googleSignInConfigured => kIsWeb || switch (defaultTargetPlatform) {
       TargetPlatform.android => googleWebClientId.isNotEmpty,
       TargetPlatform.iOS => googleWebClientId.isNotEmpty && googleIosClientId.isNotEmpty,
       _ => false,

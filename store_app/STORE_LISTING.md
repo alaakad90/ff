@@ -2,10 +2,10 @@
 
 نصوص App Store وGoogle Play، وإجابات استبيانات الخصوصية. الأطوال محسوبة على حدود كل متجر.
 
-روابط ثابتة:
-- سياسة الخصوصية: https://lacasa-store.alaa-hced.workers.dev/privacy
-- الدعم: https://lacasa-store.alaa-hced.workers.dev/support
-- حذف الحساب (Google Play): https://lacasa-store.alaa-hced.workers.dev/privacy#delete
+روابط ثابتة (الرابط القديم lacasa-store.alaa-hced.workers.dev يفتح نفس الصفحات):
+- سياسة الخصوصية: https://lacasastores.com/privacy
+- الدعم: https://lacasastores.com/support
+- حذف الحساب (Google Play): https://lacasastores.com/privacy#delete
 
 ---
 
@@ -17,8 +17,8 @@
 | Subtitle | هدايا وتحف من الخشب والبوليمر | 30 |
 | Category | Shopping (Primary) — Lifestyle (Secondary) | |
 | Keywords | هدايا,خشب,ديكور,تحف,بوليمر,طباعة,ثلاثي,مجسمات,اسم,مخصص,ساعة,بغداد,العراق,تصميم,lacasa,لاكاسا | 100 |
-| Support URL | https://lacasa-store.alaa-hced.workers.dev/support | |
-| Privacy Policy URL | https://lacasa-store.alaa-hced.workers.dev/privacy | |
+| Support URL | https://lacasastores.com/support | |
+| Privacy Policy URL | https://lacasastores.com/privacy | |
 | Copyright | 2026 La Casa 3D | |
 | Price | Free | |
 
@@ -91,8 +91,8 @@ Orders reach the real shop. If you place a test order, please write "TEST" in th
 | Short description | هدايا وديكور من الخشب والبوليمر بتصميم يناسبك، والدفع عند الاستلام. | 80 |
 | Full description | نفس وصف App Store فوك | 4000 |
 | Category | Shopping | |
-| Contact | الإيميل والموقع: https://lacasa-store.alaa-hced.workers.dev/support | |
-| Privacy policy | https://lacasa-store.alaa-hced.workers.dev/privacy | |
+| Contact | الإيميل والموقع: https://lacasastores.com/support | |
+| Privacy policy | https://lacasastores.com/privacy | |
 
 **Graphics**: أيقونة 512×512، صورة عرض (Feature graphic) 1024×500، وصور شاشة موبايل (على الأقل 2).
 
@@ -106,7 +106,7 @@ Orders reach the real shop. If you place a test order, please write "TEST" in th
 - Does your app collect or share any of the required user data types? **Yes**
 - Is all of the user data collected by your app encrypted in transit? **Yes**
 - Do you provide a way for users to request that their data is deleted? **Yes**
-- Delete account URL: https://lacasa-store.alaa-hced.workers.dev/privacy#delete
+- Delete account URL: https://lacasastores.com/privacy#delete
 
 | Category → Type | Collected | Shared | Optional? | Purposes |
 |---|---|---|---|---|

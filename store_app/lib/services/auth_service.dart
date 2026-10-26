@@ -135,6 +135,16 @@ class FirebaseAuthService implements AuthService {
 
   @override
   Future<bool> signInWithGoogle() async {
+    // بالمتصفح نافذة كوكل تنفتح من Firebase نفسه.
+    if (kIsWeb) {
+      try {
+        await _auth.signInWithPopup(GoogleAuthProvider());
+        return true;
+      } on FirebaseAuthException catch (e) {
+        if (e.code == 'popup-closed-by-user' || e.code == 'cancelled-popup-request') return false;
+        throw AuthException(authErrorMessage(e.code));
+      }
+    }
     final GoogleSignInAccount account;
     try {
       await _initGoogle();
@@ -150,7 +160,7 @@ class FirebaseAuthService implements AuthService {
   }
 
   @override
-  bool get supportsApple => defaultTargetPlatform == TargetPlatform.iOS;
+  bool get supportsApple => !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
 
   static bool _canceled(FirebaseAuthException e) =>
       e.code.contains('cancel') || (e.message ?? '').contains('1001');
@@ -181,6 +191,8 @@ class FirebaseAuthService implements AuthService {
         );
       } else if (providers.contains('apple.com')) {
         await user.reauthenticateWithProvider(AppleAuthProvider());
+      } else if (providers.contains('google.com') && kIsWeb) {
+        await user.reauthenticateWithPopup(GoogleAuthProvider());
       } else if (providers.contains('google.com')) {
         await _initGoogle();
         final GoogleSignInAccount account;

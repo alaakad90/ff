@@ -1,5 +1,6 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
@@ -22,14 +23,16 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   // التليفون يعرض الإشعار بنفسه إذا التطبيق مسدود. إذا مفتوح، نعرضه جوة الشاشة.
-  FirebaseMessaging.onMessage.listen((message) {
-    final n = message.notification;
-    if (n == null) return;
-    messengerKey.currentState?.showSnackBar(SnackBar(
-      duration: const Duration(seconds: 6),
-      content: Text([n.title, n.body].whereType<String>().join('\n')),
-    ));
-  });
+  if (!kIsWeb) {
+    FirebaseMessaging.onMessage.listen((message) {
+      final n = message.notification;
+      if (n == null) return;
+      messengerKey.currentState?.showSnackBar(SnackBar(
+        duration: const Duration(seconds: 6),
+        content: Text([n.title, n.body].whereType<String>().join('\n')),
+      ));
+    });
+  }
   final repository = FirestoreStoreRepository();
   final auth = FirebaseAuthService();
   // للإحصائيات: الزوار والحسابات المسجلة.

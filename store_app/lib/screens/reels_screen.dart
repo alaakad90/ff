@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
@@ -262,11 +263,23 @@ class _InstagramEmbedState extends State<_InstagramEmbed> {
     ..loadRequest(Uri.parse(widget.url));
 
   @override
-  Widget build(BuildContext context) => SafeArea(
-        child: Padding(
-          // نخلي مكان للوصف وزر المنتج جوة.
-          padding: const EdgeInsets.only(bottom: 120),
-          child: WebViewWidget(controller: _controller),
+  Widget build(BuildContext context) {
+    // المتصفح ما يدعم عرض صفحة داخل الصفحة بهالطريقة، فنفتح الريل بإنستغرام.
+    if (kIsWeb) {
+      return Center(
+        child: FilledButton.icon(
+          icon: const Icon(Icons.play_circle_outline),
+          label: const Text('شوف الفيديو على إنستغرام'),
+          onPressed: () => openLink(widget.url.replaceFirst(RegExp(r'embed/?$'), '')),
         ),
       );
+    }
+    return SafeArea(
+      child: Padding(
+        // نخلي مكان للوصف وزر المنتج جوة.
+        padding: const EdgeInsets.only(bottom: 120),
+        child: WebViewWidget(controller: _controller),
+      ),
+    );
+  }
 }

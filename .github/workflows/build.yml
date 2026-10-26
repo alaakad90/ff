@@ -25,6 +25,8 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
+      # يتأكد إن نسخة المتصفح تنبني (الكود اللي يشتغل بالموبايل بس لازم ما يكسرها).
+      - run: flutter build web --release --no-web-resources-cdn
 
   worker-test:
     runs-on: ubuntu-latest
@@ -64,6 +66,18 @@ jobs:
           fi
           python3 .github/scripts/check-server-secrets.py
           echo "ready=true" >> "$GITHUB_OUTPUT"
+      # المتجر بالمتصفح ينبني وينرفع ويا السيرفر على نفس الرابط.
+      - uses: subosito/flutter-action@v2
+        if: steps.check.outputs.ready == 'true'
+        with:
+          channel: stable
+          cache: true
+      - name: Build the web store
+        if: steps.check.outputs.ready == 'true'
+        working-directory: store_app
+        run: |
+          flutter build web --release --no-web-resources-cdn --dart-define=NOTIFY_URL=/notify-order
+          rm -rf ../worker/public && cp -R build/web ../worker/public
       - name: Deploy server
         if: steps.check.outputs.ready == 'true'
         uses: cloudflare/wrangler-action@v3
