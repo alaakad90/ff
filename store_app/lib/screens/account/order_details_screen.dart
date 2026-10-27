@@ -83,12 +83,18 @@ class OrderAmounts extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 1),
           child: Row(children: [Expanded(child: Text(label, style: style)), Text(value, style: style)]),
         );
+    final hasDelivery = order.deliveryZone.isNotEmpty || order.deliveryFee > 0;
     return Column(children: [
-      if (order.discount > 0) ...[
-        row('قبل الخصم', formatPrice(order.subtotal)),
-        if (order.couponAmount > 0)
+      if (order.discount > 0 || hasDelivery) ...[
+        row('المنتجات', formatPrice(order.subtotal)),
+        if (order.couponAmount > 0 && !order.freeDelivery)
           row(order.couponCode.isEmpty ? 'خصم' : 'كوبون ${order.couponCode}', '- ${formatPrice(order.couponAmount)}'),
         if (order.pointsDiscount > 0) row('${order.pointsUsed} نقطة', '- ${formatPrice(order.pointsDiscount)}'),
+        if (hasDelivery)
+          row(
+            order.deliveryZone.isEmpty ? 'التوصيل' : 'التوصيل (${order.deliveryZone})',
+            order.freeDelivery ? 'مجاني (كوبون ${order.couponCode})' : formatPrice(order.deliveryFee),
+          ),
       ],
       row(
         'المجموع',

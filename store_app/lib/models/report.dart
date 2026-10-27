@@ -36,6 +36,7 @@ class SalesReport {
   final int pointsDiscount;
   final int net; // بعد الخصم
   final int deliveredNet;
+  final int deliveryFees; // أجور التوصيل اللي اندفعت (داخل الصافي)
   final int pointsRedeemed;
   final int pointsEarned;
   final int discountedOrders;
@@ -53,6 +54,7 @@ class SalesReport {
     required this.pointsDiscount,
     required this.net,
     required this.deliveredNet,
+    required this.deliveryFees,
     required this.pointsRedeemed,
     required this.pointsEarned,
     required this.discountedOrders,
@@ -78,7 +80,7 @@ class SalesReport {
         if (o.createdAt != null && o.createdAt!.isBefore(from)) customerKey(o),
     };
 
-    var gross = 0, coupon = 0, points = 0, net = 0, delivered = 0, redeemed = 0, earned = 0, discounted = 0;
+    var gross = 0, coupon = 0, points = 0, net = 0, delivered = 0, redeemed = 0, earned = 0, discounted = 0, fees = 0;
     final couponMap = <String, (int, int)>{};
     final perCustomer = <String, List<StoreOrder>>{};
     for (final o in period) {
@@ -86,6 +88,7 @@ class SalesReport {
       coupon += o.couponAmount;
       points += o.pointsDiscount;
       net += o.total;
+      fees += o.deliveryFee;
       redeemed += o.pointsUsed;
       earned += o.pointsEarned;
       if (o.discount > 0) discounted++;
@@ -119,6 +122,7 @@ class SalesReport {
       pointsDiscount: points,
       net: net,
       deliveredNet: delivered,
+      deliveryFees: fees,
       pointsRedeemed: redeemed,
       pointsEarned: earned,
       discountedOrders: discounted,

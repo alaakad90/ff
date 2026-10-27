@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:lacasa_store/models/content.dart';
+import 'package:lacasa_store/models/delivery.dart';
 import 'package:lacasa_store/models/loyalty.dart';
 import 'package:lacasa_store/models/order.dart';
 import 'package:lacasa_store/models/product.dart';
@@ -179,12 +180,20 @@ void main() {
       return (repo, api, history);
     }
 
-    Future<void> fillAndSend(WidgetTester tester) async {
+    /// [governorate] null = استلام من المحل (بلا أجور توصيل)، وإلا توصيل لهاي المحافظة.
+    Future<void> fillAndSend(WidgetTester tester, {String? governorate}) async {
       await scrollTo(tester, find.widgetWithText(TextFormField, 'الاسم'), delta: -300);
-      final fields = find.byType(TextFormField);
-      await tester.enterText(fields.at(0), 'علي');
-      await tester.enterText(fields.at(1), '07701234567');
-      await tester.enterText(fields.at(2), 'بغداد');
+      await tester.enterText(find.widgetWithText(TextFormField, 'الاسم'), 'علي');
+      await tester.enterText(find.widgetWithText(TextFormField, 'رقم الهاتف'), '07701234567');
+      if (governorate == null) {
+        await tester.ensureVisible(find.text('استلام من المحل'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('استلام من المحل'));
+        await tester.pumpAndSettle();
+      } else {
+        await pickGovernorate(tester, governorate);
+        await tester.enterText(find.widgetWithText(TextFormField, 'الحي والمنطقة وتفاصيل العنوان'), 'حي العسكري');
+      }
       await tester.ensureVisible(find.widgetWithText(ChoiceChip, 'الخميس'));
       await tester.tap(find.widgetWithText(ChoiceChip, 'الخميس'));
       await tester.pumpAndSettle();
@@ -194,6 +203,7 @@ void main() {
 
     testWidgets('a guest applies a coupon, orders, and can track the order later', (tester) async {
       final (repo, api, history) = await openCheckout(tester);
+      await scrollTo(tester, find.widgetWithText(TextField, 'كوبون خصم (اختياري)'));
       await tester.enterText(find.widgetWithText(TextField, 'كوبون خصم (اختياري)'), 'eid10');
       await tester.tap(find.text('طبّق'));
       await tester.pumpAndSettle();
@@ -226,6 +236,7 @@ void main() {
 
     testWidgets('a wrong coupon is shown and blocks sending', (tester) async {
       final (_, api, _) = await openCheckout(tester);
+      await scrollTo(tester, find.widgetWithText(TextField, 'كوبون خصم (اختياري)'));
       await tester.enterText(find.widgetWithText(TextField, 'كوبون خصم (اختياري)'), 'NOPE');
       await tester.tap(find.text('طبّق'));
       await tester.pumpAndSettle();
@@ -255,6 +266,9 @@ void main() {
 
     testWidgets('if the price changed, the customer sees the new total and nothing is placed', (tester) async {
       final (repo, api, _) = await openCheckout(tester);
+      // نختار الاستلام أول (هذا يعيد الحساب)، وبعدها يتغير السعر بالسيرفر.
+      await tester.tap(find.text('استلام من المحل'));
+      await tester.pumpAndSettle();
       await repo.saveProduct(const Product(id: 'ck', name: 'ساعة جدار', price: 52000, categoryId: 'decor'));
       await fillAndSend(tester);
       expect(find.text('الأسعار تغيرت، شوف المجموع الجديد'), findsOneWidget);
@@ -265,6 +279,78 @@ void main() {
       await tester.pumpAndSettle();
       expect(repo.orders.single.total, 52000);
       expect(api.placed.map((r) => r.requestId).toSet().length, 1, reason: 'same request id on retry');
+    });
+
+    testWidgets('delivery fee follows the governorate, stays out of discounts, and pickup is free', (tester) async {
+      final (repo, api, _) = await openCheckout(tester);
+      await scrollTo(tester, find.text('أجور التوصيل'));
+      expect(find.text('اختار المحافظة'), findsWidgets, reason: 'no fee until a governorate is chosen');
+
+      // كوبون 10% (حد 4,000) على المنتجات بس: 50,000 - 4,000 + 2,000 توصيل.
+      await scrollTo(tester, find.widgetWithText(TextField, 'كوبون خصم (اختياري)'), delta: -200);
+      await tester.enterText(find.widgetWithText(TextField, 'كوبون خصم (اختياري)'), 'EID10');
+      await tester.tap(find.text('طبّق'));
+      await tester.pumpAndSettle();
+      await scrollTo(tester, find.byIcon(Icons.map_outlined), delta: -300);
+      await pickGovernorate(tester, 'الديوانية - المركز');
+      expect(find.text('الديوانية - المركز • التوصيل 2,000 د.ع'), findsOneWidget);
+      await scrollTo(tester, find.text('48,000 د.ع'));
+      expect(find.text('2,000 د.ع'), findsOneWidget);
+      expect(find.text('- 4,000 د.ع'), findsOneWidget);
+
+      await scrollTo(tester, find.byIcon(Icons.map_outlined), delta: -300);
+      await pickGovernorate(tester, 'الديوانية - الأقضية والنواحي');
+      // سطر الساعة 50,000، والمنتجات 50,000، والمجموع 50,000 (50,000 - 4,000 خصم + 4,000 توصيل).
+      await scrollTo(tester, find.text('50,000 د.ع').first);
+      expect(find.text('50,000 د.ع'), findsNWidgets(3));
+      expect(find.text('4,000 د.ع'), findsOneWidget);
+
+      await scrollTo(tester, find.byIcon(Icons.map_outlined), delta: -300);
+      await pickGovernorate(tester, 'البصرة');
+      await scrollTo(tester, find.text('51,000 د.ع'));
+
+      await fillAndSend(tester, governorate: 'البصرة');
+      final request = api.placed.single;
+      expect((request.zoneId, request.expectedTotal), ('basra', 51000));
+      final order = repo.orders.single;
+      expect((order.deliveryFee, order.deliveryZone, order.total), (5000, 'البصرة', 51000));
+    });
+
+    testWidgets('pickup has no delivery fee', (tester) async {
+      final (repo, api, _) = await openCheckout(tester);
+      await fillAndSend(tester);
+      expect(api.placed.single.pickupMethod, PickupMethod.pickup);
+      expect(repo.orders.single.total, 50000);
+    });
+
+    testWidgets('a free-delivery coupon removes only the delivery fee', (tester) async {
+      final (repo, _, _) = await openCheckout(tester);
+      repo.coupons['FREESHIP'] = const Coupon(code: 'FREESHIP', value: 0, type: CouponType.freeDelivery);
+      await pickGovernorate(tester, 'بغداد');
+      await scrollTo(tester, find.widgetWithText(TextField, 'كوبون خصم (اختياري)'));
+      await tester.enterText(find.widgetWithText(TextField, 'كوبون خصم (اختياري)'), 'FREESHIP');
+      await tester.tap(find.text('طبّق'));
+      await tester.pumpAndSettle();
+      await scrollTo(tester, find.text('مجاني (كوبون FREESHIP)'));
+      expect(find.text('50,000 د.ع'), findsWidgets);
+      await fillAndSend(tester, governorate: 'بغداد');
+      final order = repo.orders.single;
+      expect((order.total, order.deliveryFee, order.freeDelivery), (50000, 0, true));
+    });
+
+    testWidgets('a delivery order cannot be sent without a governorate', (tester) async {
+      final (repo, api, _) = await openCheckout(tester);
+      await scrollTo(tester, find.widgetWithText(TextFormField, 'الاسم'), delta: -300);
+      await tester.enterText(find.widgetWithText(TextFormField, 'الاسم'), 'علي');
+      await tester.enterText(find.widgetWithText(TextFormField, 'رقم الهاتف'), '07701234567');
+      await tester.enterText(find.widgetWithText(TextFormField, 'الحي والمنطقة وتفاصيل العنوان'), 'حي العسكري');
+      await tester.ensureVisible(find.widgetWithText(ChoiceChip, 'الخميس'));
+      await tester.tap(find.widgetWithText(ChoiceChip, 'الخميس'));
+      await tester.tap(find.text('أرسل الطلب'));
+      await tester.pumpAndSettle();
+      expect(api.placed, isEmpty);
+      await scrollTo(tester, find.byIcon(Icons.map_outlined), delta: -300);
+      expect(find.text('اختار المحافظة'), findsWidgets);
     });
 
     testWidgets('quick order buys one product without touching the cart', (tester) async {
@@ -384,6 +470,42 @@ void main() {
       await tester.pumpAndSettle();
       expect(repo.rules.values.map((r) => r.title), containsAll(['كمّل فرحتكم: عقود الزواج', 'هدايا استقبال المولود']));
       expect(find.text('كمّل فرحتكم: عقود الزواج'), findsOneWidget);
+    });
+
+    testWidgets('changes a delivery fee and adds a district, no new build needed', (tester) async {
+      final (repo, _) = await openAdmin(tester, 'التوصيل');
+      final centerFee = find.descendant(
+        of: find.ancestor(of: find.text('الديوانية - المركز'), matching: find.byType(Row)).first,
+        matching: find.widgetWithText(TextFormField, 'الأجور'),
+      );
+      await tester.enterText(centerFee, '2500');
+      await scrollTo(tester, find.text('أضف محافظة أو قضاء'), within: DeliveryFeesTab);
+      await tester.tap(find.text('أضف محافظة أو قضاء'));
+      await tester.pumpAndSettle();
+      await scrollTo(tester, find.text('أضف محافظة أو قضاء'), within: DeliveryFeesTab);
+      final newName = find.widgetWithText(TextFormField, 'المحافظة / القضاء').last;
+      await tester.enterText(newName, 'الديوانية - عفك');
+      await tester.tap(find.text('حفظ أجور التوصيل'));
+      await tester.pumpAndSettle();
+      final zones = repo.deliveryZones;
+      expect(zones.firstWhere((z) => z.id == 'diwaniyah-center').fee, 2500);
+      expect(zones.last.name, 'الديوانية - عفك');
+      expect(zones.last.id, matches(DeliveryZone.idPattern));
+      expect(zones.length, defaultDeliveryZones.length + 1);
+    });
+
+    testWidgets('creates a free-delivery coupon without a value', (tester) async {
+      final (repo, _) = await openAdmin(tester, 'الكوبونات');
+      await tester.tap(find.text('كوبون جديد'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.widgetWithText(TextFormField, 'رمز الكوبون'), 'freeship');
+      await tester.tap(find.text('توصيل مجاني'));
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(TextFormField, 'النسبة %'), findsNothing);
+      await tester.tap(find.text('حفظ'));
+      await tester.pumpAndSettle();
+      expect(repo.coupons['FREESHIP']?.type, CouponType.freeDelivery);
+      expect(repo.coupons['FREESHIP']?.value, 0);
     });
 
     testWidgets('saves loyalty settings', (tester) async {
@@ -509,6 +631,7 @@ void main() {
       expect(jsonDecode(calls.single.body), {
         'items': [{'productId': 'ck', 'quantity': 1}],
         'pickupMethod': 'delivery',
+        'zoneId': '',
         'coupon': 'EID10',
       }, reason: 'no prices are sent');
       expect((quote.total, quote.couponAmount, quote.maxPoints, quote.balance), (46000, 4000, 120, 300));

@@ -54,7 +54,7 @@ class _AdminHomeState extends State<AdminHome> {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 11,
+      length: 12,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('لوحة التحكم'),
@@ -76,6 +76,7 @@ class _AdminHomeState extends State<AdminHome> {
               Tab(icon: Icon(Icons.grid_view_outlined), text: 'الأقسام'),
               Tab(icon: Icon(Icons.view_carousel_outlined), text: 'العروض'),
               Tab(icon: Icon(Icons.local_offer_outlined), text: 'الكوبونات'),
+              Tab(icon: Icon(Icons.local_shipping_outlined), text: 'التوصيل'),
               Tab(icon: Icon(Icons.stars_outlined), text: 'الولاء'),
               Tab(icon: Icon(Icons.auto_awesome), text: 'عروض ذكية'),
               Tab(icon: Icon(Icons.play_circle_outline), text: 'الريلز'),
@@ -91,6 +92,7 @@ class _AdminHomeState extends State<AdminHome> {
           _CategoriesTab(),
           _BannersTab(),
           CouponsTab(),
+          DeliveryFeesTab(),
           LoyaltySettingsTab(),
           RecommendationRulesTab(),
           _ReelsTab(),
@@ -286,6 +288,8 @@ class _OrderCard extends StatelessWidget {
           info(Icons.phone, SelectableText(customer.phone, textDirection: TextDirection.ltr)),
           if (order.deliveryDay.isNotEmpty)
             info(Icons.event, Text('${order.pickupMethod.label} • ${order.deliveryDay}')),
+          if (order.deliveryZone.isNotEmpty)
+            info(Icons.map_outlined, Text('${order.deliveryZone} • التوصيل ${order.freeDelivery ? 'مجاني' : formatPrice(order.deliveryFee)}')),
           if (customer.address.isNotEmpty)
             info(Icons.location_on, SelectableText(customer.address)),
           if (customer.notes.isNotEmpty) info(Icons.note_alt_outlined, Text(customer.notes)),

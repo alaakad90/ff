@@ -107,6 +107,11 @@ describe('coupons', () => {
     await assertSucceeds(setDoc(doc(admin, 'coupons/EID15'), coupon));
     await assertFails(setDoc(doc(admin, 'coupons/bad code'), coupon));
     await assertFails(setDoc(doc(admin, 'coupons/HUGE'), { ...coupon, value: 150 }));
+    await assertSucceeds(setDoc(doc(admin, 'coupons/FREESHIP'), { ...coupon, type: 'freeDelivery', value: 0 }));
+    await assertFails(setDoc(doc(admin, 'coupons/ZERO'), { ...coupon, type: 'fixed', value: 0 }));
+    await assertFails(setDoc(doc(admin, 'coupons/WEIRD'), { ...coupon, type: 'cashback' }));
+    await assertSucceeds(setDoc(doc(admin, 'settings/delivery'), { zones: [{ id: 'baghdad', name: 'بغداد', fee: 5000, active: true }] }));
+    await assertFails(setDoc(doc(as('u1'), 'settings/delivery'), { zones: [] }));
     await assertFails(setDoc(doc(admin, 'coupons/STARTED'), { ...coupon, usedCount: 5 }));
     await assertFails(updateDoc(doc(admin, 'coupons/SECRET'), { usedCount: 0 }));
     await assertSucceeds(updateDoc(doc(admin, 'coupons/SECRET'), { active: false }));

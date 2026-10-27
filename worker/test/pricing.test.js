@@ -102,3 +102,42 @@ it('phone keys match local and international formats', () => {
   assert.equal(phoneKey('+9647701234567'), '7701234567');
   assert.equal(phoneKey('123'), '123');
 });
+
+describe('delivery', () => {
+  const loyalty = loyaltySettings({});
+  const lines = [{ productId: 'p2', quantity: 1 }]; // 20,000
+
+  it('adds the fee after product discounts, and never discounts it', () => {
+    const q = computeQuote({
+      lines, products, loyalty, coupon: { type: 'percent', value: 50 }, couponCode: 'HALF',
+      uid: 'u1', balance: 1000, requestedPoints: 1000, now, deliveryFee: 5000,
+    });
+    // 50% = 10,000؛ النقاط لحد 50% من 10,000 = 5,000؛ المنتجات 5,000 + التوصيل 5,000.
+    assert.deepEqual([q.coupon.amount, q.points.amount, q.productsTotal, q.deliveryCharged, q.total], [10000, 5000, 5000, 5000, 10000]);
+    assert.equal(q.pointsToEarn, 5, 'earned on products only');
+  });
+
+  it('free delivery coupon waives the fee only', () => {
+    const q = computeQuote({ lines, products, loyalty, coupon: { type: 'freeDelivery' }, couponCode: 'SHIP', now, deliveryFee: 4000 });
+    assert.deepEqual(q.coupon, { code: 'SHIP', amount: 4000, freeDelivery: true });
+    assert.deepEqual([q.productsTotal, q.deliveryCharged, q.total], [20000, 0, 20000]);
+    const pickup = computeQuote({ lines, products, loyalty, coupon: { type: 'freeDelivery' }, couponCode: 'SHIP', now, deliveryFee: 0 });
+    assert.equal(pickup.couponError.code, 'no_delivery');
+  });
+});
+
+it('delivery zones: defaults, owner edits, and bad entries dropped', async () => {
+  const { deliveryZones, findZone } = await import('../src/delivery.js');
+  const defaults = deliveryZones(undefined);
+  assert.equal(defaults.length, 20);
+  assert.deepEqual(['diwaniyah-center', 'diwaniyah-districts', 'baghdad'].map((id) => findZone(defaults, id).fee), [2000, 4000, 5000]);
+  const custom = deliveryZones({ zones: [
+    { id: 'afak', name: 'عفك', fee: 3000 },
+    { id: 'afak', name: 'مكرر', fee: 1 },
+    { id: 'BAD ID', name: 'x', fee: 1 },
+    { id: 'neg', name: 'سالب', fee: -5 },
+    { id: 'off', name: 'موقوف', fee: 1000, active: false },
+  ] });
+  assert.deepEqual(custom.map((z) => z.id), ['afak', 'off']);
+  assert.equal(findZone(custom, 'off'), null);
+});

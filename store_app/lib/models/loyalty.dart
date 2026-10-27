@@ -77,7 +77,9 @@ class LoyaltySettings {
 
 enum CouponType {
   percent('percent', 'نسبة %'),
-  fixed('fixed', 'مبلغ ثابت');
+  fixed('fixed', 'مبلغ ثابت'),
+  // يشيل أجور التوصيل بس؛ المنتجات بسعرها.
+  freeDelivery('freeDelivery', 'توصيل مجاني');
 
   final String value;
   final String label;
@@ -174,7 +176,11 @@ class Coupon {
       );
 
   /// وصف قصير: "15%" أو "5,000 د.ع".
-  String get valueLabel => type == CouponType.percent ? '$value%' : '$value د.ع';
+  String get valueLabel => switch (type) {
+        CouponType.percent => '$value%',
+        CouponType.fixed => '$value د.ع',
+        CouponType.freeDelivery => 'توصيل مجاني',
+      };
 
   bool isExpired(DateTime now) => endsAt != null && now.isAfter(endsAt!);
 }

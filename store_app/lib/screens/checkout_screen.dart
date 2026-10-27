@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/content.dart';
+import '../models/delivery.dart';
 import '../models/order.dart';
 import '../models/product.dart';
 import '../services/auth_service.dart';
@@ -32,6 +33,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   final _couponField = TextEditingController();
   String? _deliveryDay;
   PickupMethod _pickup = PickupMethod.delivery;
+  // المحافظة: أجور التوصيل حسبها (من لوحة التحكم).
+  late final Stream<List<DeliveryZone>> _zones = context.read<StoreRepository>().watchDeliveryZones();
+  DeliveryZone? _zone;
+  bool _zoneMissing = false;
   bool _dayMissing = false;
   bool _sending = false;
 
@@ -98,16 +103,19 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     // الهاتف حتى السيرفر يتأكد إن الكوبون ما انستعمل بنفس الرقم.
     final phone = _phone.text.trim();
     final customer = phone.isEmpty ? null : Customer(name: '-', phone: phone);
-    try {
-      var quote = await _api.quote(OrderRequest(lines: lines, coupon: _coupon, customer: customer));
-      if (_usePoints && quote.maxPoints > 0) {
-        // نطلب أكثر نقاط مسموحة، والسيرفر يحسب الخصم.
-        quote = await _api.quote(OrderRequest(
+    OrderRequest request({int points = 0}) => OrderRequest(
           lines: lines,
           coupon: _coupon,
-          points: quote.maxPoints,
+          points: points,
           customer: customer,
-        ));
+          pickupMethod: _pickup,
+          zoneId: _zone?.id ?? '',
+        );
+    try {
+      var quote = await _api.quote(request());
+      if (_usePoints && quote.maxPoints > 0) {
+        // نطلب أكثر نقاط مسموحة، والسيرفر يحسب الخصم.
+        quote = await _api.quote(request(points: quote.maxPoints));
       }
       if (!mounted || generation != _quoteGeneration) return;
       setState(() {
@@ -119,6 +127,47 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     } finally {
       if (mounted && generation == _quoteGeneration) setState(() => _quoting = false);
     }
+  }
+
+  void _setPickup(PickupMethod pickup) {
+    setState(() => _pickup = pickup);
+    if (_api.enabled) _refreshQuote();
+  }
+
+  /// قائمة المحافظات وأجور التوصيل لكل وحدة.
+  Future<void> _pickZone(List<DeliveryZone> zones) async {
+    final picked = await showModalBottomSheet<DeliveryZone>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.7,
+        maxChildSize: 0.95,
+        builder: (context, controller) => ListView(
+          controller: controller,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Text('اختار محافظتك', style: Theme.of(context).textTheme.titleMedium),
+            ),
+            for (final zone in zones.where((z) => z.active))
+              ListTile(
+                leading: Icon(zone.id == _zone?.id ? Icons.radio_button_checked : Icons.radio_button_unchecked),
+                title: Text(zone.name),
+                trailing: Text('التوصيل ${formatPrice(zone.fee)}'),
+                onTap: () => Navigator.of(context).pop(zone),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _zone = picked;
+      _zoneMissing = false;
+    });
+    if (_api.enabled) _refreshQuote();
   }
 
   void _applyCoupon() {
@@ -136,8 +185,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   Future<void> _submit() async {
     final formOk = _formKey.currentState!.validate();
-    setState(() => _dayMissing = _deliveryDay == null);
-    if (!formOk || _deliveryDay == null) return;
+    final needsZone = _pickup == PickupMethod.delivery && _zone == null;
+    setState(() {
+      _dayMissing = _deliveryDay == null;
+      _zoneMissing = needsZone;
+    });
+    if (!formOk || _deliveryDay == null || needsZone) return;
 
     final quote = _quote;
     if (_api.enabled && (quote == null || quote.unavailable.isNotEmpty || quote.couponError.isNotEmpty)) {
@@ -180,6 +233,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           customer: customer,
           deliveryDay: _deliveryDay!,
           pickupMethod: _pickup,
+          zoneId: _zone?.id ?? '',
           coupon: _coupon,
           points: _usePoints ? quote!.points : 0,
           expectedTotal: quote!.total,
@@ -192,11 +246,20 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           history.addGuestOrder(placed.orderId, placed.trackingKey);
         }
       } else {
-        // بدون سيرفر (نسخة تجريبية): الطريقة القديمة بدون خصومات.
+        // بدون سيرفر (نسخة تجريبية): الطريقة القديمة بدون خصومات. المحافظة تنكتب بالعنوان
+        // وأجورها تنضاف للمجموع (الطلب المباشر ما يقبل حقول جديدة).
+        final fee = _pickup == PickupMethod.delivery ? _zone!.fee : 0;
         final order = StoreOrder(
-          customer: customer,
+          customer: _pickup == PickupMethod.delivery
+              ? Customer(
+                  name: customer.name,
+                  phone: customer.phone,
+                  address: '${_zone!.name}، ${customer.address}',
+                  notes: customer.notes,
+                )
+              : customer,
           items: items.map(OrderItem.fromCartItem).toList(),
-          total: items.fold(0, (sum, item) => sum + item.total),
+          total: items.fold(0, (sum, item) => sum + item.total) + fee,
           deliveryDay: _deliveryDay!,
           pickupMethod: _pickup,
           userId: session.signedIn ? session.uid : '',
@@ -275,7 +338,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     final session = context.watch<Session>();
     final theme = Theme.of(context);
     final quote = _quote;
-    final localTotal = items.fold(0, (sum, item) => sum + item.total);
+    final localSubtotal = items.fold(0, (sum, item) => sum + item.total);
+    final localFee = _pickup == PickupMethod.delivery ? (_zone?.fee ?? 0) : 0;
+    // التوصيل: من السيرفر إذا موجود (مع كوبون التوصيل المجاني)، وإلا من قائمة المحافظات.
+    final deliveryCharged = quote?.deliveryCharged ?? localFee;
     final serverPrice = {for (final l in quote?.items ?? const <QuoteLine>[]) l.productId: l.price};
 
     return Scaffold(
@@ -324,16 +390,42 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 ),
               ],
               selected: {_pickup},
-              onSelectionChanged: (s) => setState(() => _pickup = s.first),
+              onSelectionChanged: (s) => _setPickup(s.first),
             ),
             if (_pickup == PickupMethod.delivery) ...[
+              const SizedBox(height: 12),
+              StreamBuilder<List<DeliveryZone>>(
+                stream: _zones,
+                builder: (context, snapshot) {
+                  final zones = snapshot.data ?? defaultDeliveryZones;
+                  return InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () => _pickZone(zones),
+                    child: InputDecorator(
+                      isEmpty: _zone == null,
+                      decoration: InputDecoration(
+                        labelText: 'المحافظة',
+                        hintText: 'اختار محافظتك',
+                        prefixIcon: const Icon(Icons.map_outlined),
+                        suffixIcon: const Icon(Icons.arrow_drop_down),
+                        errorText: _zoneMissing ? 'اختار المحافظة' : null,
+                      ),
+                      child: _zone == null
+                          ? null
+                          : Text('${_zone!.name} • التوصيل ${formatPrice(_zone!.fee)}'),
+                    ),
+                  );
+                },
+              ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _address,
                 textInputAction: TextInputAction.next,
+                maxLines: 2,
+                minLines: 1,
                 decoration: const InputDecoration(
-                  labelText: 'العنوان',
-                  hintText: 'المحافظة، المنطقة، أقرب نقطة دالة',
+                  labelText: 'الحي والمنطقة وتفاصيل العنوان',
+                  hintText: 'الحي، المنطقة، الشارع، أقرب نقطة دالة',
                   prefixIcon: Icon(Icons.location_on),
                 ),
                 validator: (v) => (v == null || v.trim().isEmpty) ? 'اكتب العنوان' : null,
@@ -436,14 +528,25 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                         ),
                       ),
                     const Divider(),
-                    if (quote != null && quote.discount > 0) ...[
-                      _AmountRow(label: 'قبل الخصم', amount: quote.subtotal),
-                      if (quote.couponAmount > 0)
-                        _AmountRow(label: 'كوبون ${quote.couponCode}', amount: -quote.couponAmount),
-                      if (quote.pointsAmount > 0)
-                        _AmountRow(label: '${quote.points} نقطة', amount: -quote.pointsAmount),
-                      const SizedBox(height: 4),
-                    ],
+                    _AmountRow(label: 'المنتجات', amount: quote?.subtotal ?? localSubtotal),
+                    if (quote != null && quote.couponAmount > 0 && !quote.freeDelivery)
+                      _AmountRow(label: 'كوبون ${quote.couponCode}', amount: -quote.couponAmount),
+                    if (quote != null && quote.pointsAmount > 0)
+                      _AmountRow(label: '${quote.points} نقطة', amount: -quote.pointsAmount),
+                    // أجور التوصيل ثابتة: الخصم والنقاط ما يشملوها.
+                    Row(children: [
+                      const Expanded(child: Text('أجور التوصيل')),
+                      Text(
+                        _pickup == PickupMethod.pickup
+                            ? formatPrice(0)
+                            : _zone == null
+                                ? 'اختار المحافظة'
+                                : quote != null && quote.freeDelivery
+                                    ? 'مجاني (كوبون ${quote.couponCode})'
+                                    : formatPrice(deliveryCharged),
+                      ),
+                    ]),
+                    const SizedBox(height: 4),
                     Row(
                       children: [
                         Text('المجموع', style: theme.textTheme.titleMedium),
@@ -452,7 +555,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                           const SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2))
                         else
                           Text(
-                            formatPrice(quote?.total ?? localTotal),
+                            formatPrice(quote?.total ?? localSubtotal + localFee),
                             style: theme.textTheme.titleMedium?.copyWith(
                               fontWeight: FontWeight.bold,
                               color: theme.colorScheme.secondary,

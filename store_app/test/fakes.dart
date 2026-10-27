@@ -241,25 +241,38 @@ class FakeStoreApi implements StoreApi {
       }
     }
     final subtotal = items.fold(0, (sum, l) => sum + l.price * l.quantity);
+    // أجور التوصيل من قائمة المحافظات (مثل السيرفر)، والاستلام بلا أجور.
+    final zone = repo.deliveryZones.where((z) => z.id == request.zoneId && z.active).firstOrNull;
+    final deliveryFee = request.pickupMethod == PickupMethod.delivery ? (zone?.fee ?? 0) : 0;
     var couponAmount = 0;
     var couponError = '';
+    var freeDelivery = false;
     if (request.coupon.isNotEmpty) {
       final c = repo.coupons[request.coupon];
       if (c == null || !c.active) {
         couponError = 'الكوبون مو صحيح';
+      } else if (c.type.value == 'freeDelivery') {
+        if (deliveryFee == 0) {
+          couponError = 'كوبون التوصيل المجاني للطلبات اللي تنوصل بس';
+        } else {
+          freeDelivery = true;
+          couponAmount = deliveryFee;
+        }
       } else {
         couponAmount = c.type.value == 'percent' ? subtotal * c.value ~/ 100 : c.value;
         if (c.maxDiscount > 0 && couponAmount > c.maxDiscount) couponAmount = c.maxDiscount;
       }
     }
-    final afterCoupon = subtotal - couponAmount;
+    final afterCoupon = subtotal - (freeDelivery ? 0 : couponAmount);
     final s = repo.loyalty;
     final balance = uid.isEmpty ? 0 : (repo.wallets[uid]?.points ?? 0);
     var maxPoints = uid.isEmpty ? 0 : [balance, afterCoupon * s.maxRedeemPercent ~/ 100 ~/ s.pointValue].reduce((a, b) => a < b ? a : b);
     if (maxPoints < s.minRedeemPoints) maxPoints = 0;
     final points = request.points.clamp(0, maxPoints);
     final pointsAmount = points * s.pointValue;
-    final total = afterCoupon - pointsAmount;
+    final productsTotal = afterCoupon - pointsAmount;
+    final deliveryCharged = freeDelivery ? 0 : deliveryFee;
+    final total = productsTotal + deliveryCharged;
     return OrderQuote(
       items: items,
       unavailable: unavailable,
@@ -271,8 +284,11 @@ class FakeStoreApi implements StoreApi {
       pointsAmount: pointsAmount,
       maxPoints: maxPoints,
       total: total,
-      pointsToEarn: uid.isEmpty ? 0 : total * s.pointsPer1000 ~/ 1000,
+      pointsToEarn: uid.isEmpty ? 0 : productsTotal * s.pointsPer1000 ~/ 1000,
       balance: balance,
+      deliveryFee: deliveryFee,
+      deliveryCharged: deliveryCharged,
+      freeDelivery: freeDelivery,
     );
   }
 
@@ -291,6 +307,10 @@ class FakeStoreApi implements StoreApi {
       throw error;
     }
     final quote = await _compute(request);
+    if (request.pickupMethod == PickupMethod.delivery &&
+        !repo.deliveryZones.any((z) => z.id == request.zoneId && z.active)) {
+      throw StoreApiException('اختار المحافظة', code: 'invalid_zone');
+    }
     if (request.expectedTotal != null && request.expectedTotal != quote.total) {
       throw StoreApiException('الأسعار تغيرت، شوف المجموع الجديد', code: 'price_changed', quote: quote);
     }
@@ -305,6 +325,9 @@ class FakeStoreApi implements StoreApi {
       couponAmount: quote.couponAmount,
       pointsUsed: quote.points,
       pointsDiscount: quote.pointsAmount,
+      deliveryFee: quote.deliveryCharged,
+      deliveryZone: repo.deliveryZones.where((z) => z.id == request.zoneId).firstOrNull?.name ?? '',
+      freeDelivery: quote.freeDelivery,
       deliveryDay: request.deliveryDay,
       pickupMethod: request.pickupMethod,
       userId: uid,
@@ -340,4 +363,18 @@ class FakeStoreApi implements StoreApi {
     statusChanges.add((orderId, status));
     await repo.setOrderStatus(orderId, status);
   }
+}
+
+/// يختار المحافظة من قائمة "المحافظة" بإكمال الطلب.
+Future<void> pickGovernorate(WidgetTester tester, String name) async {
+  final field = find.byIcon(Icons.map_outlined);
+  await tester.ensureVisible(field);
+  await tester.pumpAndSettle();
+  await tester.tap(field);
+  await tester.pumpAndSettle();
+  final option = find.widgetWithText(ListTile, name);
+  final sheet = find.descendant(of: find.byType(BottomSheet), matching: find.byType(Scrollable)).first;
+  await tester.scrollUntilVisible(option, 100, scrollable: sheet);
+  await tester.tap(option);
+  await tester.pumpAndSettle();
 }

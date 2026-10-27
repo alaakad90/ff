@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/content.dart';
+import '../models/delivery.dart';
 import '../models/loyalty.dart';
 import '../models/order.dart';
 import '../models/product.dart';
@@ -72,6 +73,10 @@ abstract class StoreRepository {
 
   Stream<List<RecommendationRule>> watchRecommendationRules({bool includeHidden = false});
   Future<void> saveRecommendationRule(RecommendationRule rule);
+
+  /// أجور التوصيل لكل محافظة/قضاء (الافتراضي إذا ما محفوظة).
+  Stream<List<DeliveryZone>> watchDeliveryZones();
+  Future<void> saveDeliveryZones(List<DeliveryZone> zones);
 }
 
 List<Product> _sortProducts(Iterable<Product> items) =>
@@ -107,6 +112,9 @@ StoreOrder _orderFromMap(String id, Map<String, dynamic> data) => StoreOrder(
             StatusEvent(OrderStatus.fromValue(e['status'] as String?), (e['at'] as Timestamp?)?.toDate()),
       ],
       pricedByServer: data['pricedBy'] == 'server',
+      deliveryFee: (data['deliveryFee'] as num?)?.toInt() ?? 0,
+      deliveryZone: (data['deliveryZone'] as Map?)?['name'] as String? ?? '',
+      freeDelivery: (data['coupon'] as Map?)?['freeDelivery'] == true,
     );
 
 class FirestoreStoreRepository implements StoreRepository {
@@ -386,6 +394,14 @@ class FirestoreStoreRepository implements StoreRepository {
   @override
   Future<void> saveRecommendationRule(RecommendationRule rule) =>
       _save('recommendationRules', rule.id, rule.toMap());
+
+  @override
+  Stream<List<DeliveryZone>> watchDeliveryZones() =>
+      _col('settings').doc('delivery').snapshots().map((d) => deliveryZonesFromMap(d.data()));
+
+  @override
+  Future<void> saveDeliveryZones(List<DeliveryZone> zones) =>
+      _col('settings').doc('delivery').set({'zones': zones.map((z) => z.toMap()).toList()});
 }
 
 /// نسخة بالذاكرة للاختبارات.
@@ -642,6 +658,17 @@ class InMemoryStoreRepository implements StoreRepository {
   Future<void> saveRecommendationRule(RecommendationRule rule) {
     final id = rule.id.isEmpty ? _newId('rule') : rule.id;
     rules[id] = rule.copyWith(id: id);
+    return _changed();
+  }
+
+  List<DeliveryZone> deliveryZones = defaultDeliveryZones;
+
+  @override
+  Stream<List<DeliveryZone>> watchDeliveryZones() => _watch(() => deliveryZones);
+
+  @override
+  Future<void> saveDeliveryZones(List<DeliveryZone> zones) {
+    deliveryZones = List.of(zones);
     return _changed();
   }
 }

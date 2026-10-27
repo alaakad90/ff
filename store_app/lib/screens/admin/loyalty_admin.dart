@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/content.dart';
+import '../../models/delivery.dart';
 import '../../models/loyalty.dart';
 import '../../services/store_repository.dart';
 import '../../widgets/product_grid.dart';
@@ -166,7 +167,7 @@ class _CouponEditScreenState extends State<CouponEditScreen> {
       code: _code.text.trim().toUpperCase(),
       description: _description.text.trim(),
       type: _type,
-      value: _parseInt(_value.text),
+      value: _type == CouponType.freeDelivery ? 0 : _parseInt(_value.text),
       minSubtotal: _parseInt(_minSubtotal.text),
       maxDiscount: _parseInt(_maxDiscount.text),
       usageLimit: _parseInt(_usageLimit.text),
@@ -222,17 +223,20 @@ class _CouponEditScreenState extends State<CouponEditScreen> {
               onSelectionChanged: (s) => setState(() => _type = s.first),
             ),
             const SizedBox(height: 12),
-            TextFormField(
-              controller: _value,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(labelText: _type == CouponType.percent ? 'النسبة %' : 'المبلغ بالدينار'),
-              validator: (v) {
-                final n = _parseInt(v ?? '');
-                if (n <= 0) return 'اكتب القيمة';
-                if (_type == CouponType.percent && n > 100) return 'النسبة لازم 100 أو أقل';
-                return null;
-              },
-            ),
+            if (_type == CouponType.freeDelivery)
+              const Text('يشيل أجور التوصيل بس، والمنتجات تبقى بسعرها. ما ينفع للاستلام من المحل.')
+            else
+              TextFormField(
+                controller: _value,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(labelText: _type == CouponType.percent ? 'النسبة %' : 'المبلغ بالدينار'),
+                validator: (v) {
+                  final n = _parseInt(v ?? '');
+                  if (n <= 0) return 'اكتب القيمة';
+                  if (_type == CouponType.percent && n > 100) return 'النسبة لازم 100 أو أقل';
+                  return null;
+                },
+              ),
             const SizedBox(height: 12),
             TextFormField(
               controller: _minSubtotal,
@@ -707,6 +711,148 @@ class _RecommendationRuleEditScreenState extends State<RecommendationRuleEditScr
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: FilledButton(onPressed: _saving ? null : _save, child: const Text('حفظ')),
+        ),
+      ),
+    );
+  }
+}
+
+// ───────────── أجور التوصيل ─────────────
+
+/// أجور التوصيل لكل محافظة أو قضاء. تتغير هنا وتشتغل مباشرة بدون نسخة جديدة من التطبيق.
+class DeliveryFeesTab extends StatefulWidget {
+  const DeliveryFeesTab({super.key});
+
+  @override
+  State<DeliveryFeesTab> createState() => _DeliveryFeesTabState();
+}
+
+class _DeliveryFeesTabState extends State<DeliveryFeesTab> {
+  late final _repo = context.read<StoreRepository>();
+  final _formKey = GlobalKey<FormState>();
+  List<DeliveryZone>? _zones;
+  final _fees = <String, TextEditingController>{};
+  final _names = <String, TextEditingController>{};
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _repo.watchDeliveryZones().first.then(_load).catchError((_) {
+      if (mounted) _snack(context, 'ما كدرنا نحمل أجور التوصيل');
+    });
+  }
+
+  void _load(List<DeliveryZone> zones) {
+    if (!mounted) return;
+    setState(() {
+      _zones = List.of(zones);
+      for (final z in zones) {
+        _fees[z.id] = TextEditingController(text: '${z.fee}');
+        _names[z.id] = TextEditingController(text: z.name);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    for (final c in [..._fees.values, ..._names.values]) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  void _add() {
+    final id = newZoneId(_zones!);
+    setState(() {
+      _zones!.add(DeliveryZone(id: id, name: '', fee: 5000));
+      _fees[id] = TextEditingController(text: '5000');
+      _names[id] = TextEditingController();
+    });
+  }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+    final zones = [
+      for (final z in _zones!)
+        z.copyWith(name: _names[z.id]!.text.trim(), fee: int.parse(_fees[z.id]!.text.trim())),
+    ];
+    setState(() => _saving = true);
+    try {
+      await _repo.saveDeliveryZones(zones);
+      if (mounted) _snack(context, 'انحفظت أجور التوصيل');
+    } catch (_) {
+      if (mounted) _snack(context, 'ما كدرنا نحفظ');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final zones = _zones;
+    if (zones == null) return const Center(child: CircularProgressIndicator());
+    final theme = Theme.of(context);
+    return Scaffold(
+      floatingActionButton: FloatingActionButton.extended(
+        heroTag: null,
+        onPressed: _saving ? null : _save,
+        icon: const Icon(Icons.save_outlined),
+        label: const Text('حفظ أجور التوصيل'),
+      ),
+      body: Form(
+        key: _formKey,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
+          children: [
+            Text(
+              'الأجور تنضاف للطلب حسب محافظة الزبون. الخصومات والنقاط ما تشملها، '
+              'والاستلام من المحل بلا أجور. المنطقة الموقوفة ما تبين للزبون.',
+              style: theme.textTheme.bodySmall,
+            ),
+            const SizedBox(height: 8),
+            for (final z in zones)
+              Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: TextFormField(
+                          controller: _names[z.id],
+                          decoration: const InputDecoration(labelText: 'المحافظة / القضاء', isDense: true),
+                          validator: (v) => (v ?? '').trim().isEmpty ? 'اكتب الاسم' : null,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 2,
+                        child: TextFormField(
+                          controller: _fees[z.id],
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(labelText: 'الأجور', suffixText: 'د.ع', isDense: true),
+                          validator: (v) {
+                            final n = int.tryParse((v ?? '').trim());
+                            return n == null || n < 0 ? 'رقم' : null;
+                          },
+                        ),
+                      ),
+                      Switch(
+                        value: z.active,
+                        onChanged: (v) => setState(() => zones[zones.indexOf(z)] = z.copyWith(active: v)),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            OutlinedButton.icon(
+              onPressed: _add,
+              icon: const Icon(Icons.add_location_alt_outlined),
+              label: const Text('أضف محافظة أو قضاء'),
+            ),
+          ],
         ),
       ),
     );
