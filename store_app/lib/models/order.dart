@@ -148,6 +148,9 @@ class StoreOrder {
   final int pointsEarned; // بعد التسليم
   final List<StatusEvent> statusHistory;
   final bool pricedByServer;
+  final int deliveryFee; // أجور التوصيل اللي يدفعها (0 للاستلام أو التوصيل المجاني)
+  final String deliveryZone; // اسم المحافظة/القضاء
+  final bool freeDelivery; // الكوبون "توصيل مجاني"
 
   const StoreOrder({
     this.id = '',
@@ -168,6 +171,9 @@ class StoreOrder {
     this.pointsEarned = 0,
     this.statusHistory = const [],
     this.pricedByServer = false,
+    this.deliveryFee = 0,
+    this.deliveryZone = '',
+    this.freeDelivery = false,
   }) : subtotal = subtotal ?? total;
 
   int get discount => couponAmount + pointsDiscount;
@@ -223,5 +229,8 @@ class StoreOrder {
         pointsEarned: pointsEarned,
         statusHistory: statusHistory ?? this.statusHistory,
         pricedByServer: pricedByServer,
+        deliveryFee: deliveryFee,
+        deliveryZone: deliveryZone,
+        freeDelivery: freeDelivery,
       );
 }

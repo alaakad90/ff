@@ -64,6 +64,9 @@ class OrderQuote {
   final int total;
   final int pointsToEarn;
   final int balance;
+  final int deliveryFee; // أجور المحافظة
+  final int deliveryCharged; // اللي يندفع فعلاً (0 مع كوبون التوصيل المجاني)
+  final bool freeDelivery;
 
   const OrderQuote({
     this.items = const [],
@@ -78,6 +81,9 @@ class OrderQuote {
     required this.total,
     this.pointsToEarn = 0,
     this.balance = 0,
+    this.deliveryFee = 0,
+    this.deliveryCharged = 0,
+    this.freeDelivery = false,
   });
 
   int get discount => couponAmount + pointsAmount;
@@ -102,6 +108,9 @@ class OrderQuote {
         total: (j['total'] as num?)?.toInt() ?? 0,
         pointsToEarn: (j['pointsToEarn'] as num?)?.toInt() ?? 0,
         balance: (j['balance'] as num?)?.toInt() ?? 0,
+        deliveryFee: (j['deliveryFee'] as num?)?.toInt() ?? 0,
+        deliveryCharged: (j['deliveryCharged'] as num?)?.toInt() ?? 0,
+        freeDelivery: (j['coupon'] as Map?)?['freeDelivery'] == true,
       );
 }
 
@@ -112,6 +121,7 @@ class OrderRequest {
   final Customer? customer;
   final String deliveryDay;
   final PickupMethod pickupMethod;
+  final String zoneId; // المحافظة (للتوصيل)
   final String coupon;
   final int points;
   final int? expectedTotal;
@@ -123,6 +133,7 @@ class OrderRequest {
     this.customer,
     this.deliveryDay = '',
     this.pickupMethod = PickupMethod.delivery,
+    this.zoneId = '',
     this.coupon = '',
     this.points = 0,
     this.expectedTotal,
@@ -136,6 +147,7 @@ class OrderRequest {
         if (customer != null) 'phone': customer!.phone,
         if (deliveryDay.isNotEmpty) 'deliveryDay': deliveryDay,
         'pickupMethod': pickupMethod.value,
+        if (pickupMethod == PickupMethod.delivery && zoneId.isNotEmpty) 'zoneId': zoneId,
         if (coupon.isNotEmpty) 'coupon': coupon,
         if (points > 0) 'points': points,
         'expectedTotal': ?expectedTotal,
@@ -293,6 +305,9 @@ class HttpStoreApi implements StoreApi {
       couponAmount: (j['discount'] as num?)?.toInt() ?? 0,
       deliveryDay: j['deliveryDay'] as String? ?? '',
       pickupMethod: PickupMethod.fromValue(j['pickupMethod'] as String?),
+      deliveryFee: (j['deliveryFee'] as num?)?.toInt() ?? 0,
+      deliveryZone: j['deliveryZone'] as String? ?? '',
+      freeDelivery: j['freeDelivery'] == true,
       status: OrderStatus.fromValue(j['status'] as String?),
       createdAt: DateTime.tryParse(j['createdAt'] as String? ?? '')?.toLocal(),
       statusHistory: [

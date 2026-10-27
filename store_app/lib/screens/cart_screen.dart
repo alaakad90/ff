@@ -123,6 +123,13 @@ class CartScreen extends StatelessWidget {
                         ),
                       ],
                     ),
+                    Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: Text(
+                        '+ أجور التوصيل حسب المحافظة (تبين بإكمال الطلب). الاستلام من المحل بلا أجور.',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ),
                     const SizedBox(height: 12),
                     SizedBox(
                       width: double.infinity,

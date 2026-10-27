@@ -142,9 +142,11 @@ service cloud.firestore {
       return c.keys().hasOnly(['description', 'type', 'value', 'minSubtotal', 'maxDiscount', 'startsAt', 'endsAt',
                                'usageLimit', 'perUserLimit', 'usedCount', 'active', 'assignedTo', 'firstOrderOnly',
                                'createdAt', 'updatedAt'])
-        && c.type in ['percent', 'fixed']
-        && c.value is int && c.value > 0
-        && (c.type == 'fixed' || c.value <= 100)
+        // freeDelivery: توصيل مجاني (يشيل أجور التوصيل بس، فقيمته 0).
+        && c.type in ['percent', 'fixed', 'freeDelivery']
+        && c.value is int && c.value >= 0
+        && (c.type == 'freeDelivery' || c.value > 0)
+        && (c.type != 'percent' || c.value <= 100)
         && c.get('minSubtotal', 0) is int && c.get('minSubtotal', 0) >= 0
         && c.get('maxDiscount', 0) is int && c.get('maxDiscount', 0) >= 0
         && c.get('usageLimit', 0) is int && c.get('usageLimit', 0) >= 0

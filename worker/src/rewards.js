@@ -36,10 +36,12 @@ async function settle(tx, orderId, order, now) {
 
   if (order.status === 'done' && uid && !order.pointsAwardedAt && !order.cancelSettledAt) {
     const loyalty = loyaltySettings((await tx.get('settings/loyalty'))?.data);
-    const earned = pointsFor(loyalty, Number(order.total) || 0);
+    // النقاط والدعوة على مبلغ المنتجات بس، بدون أجور التوصيل.
+    const productsPaid = (Number(order.total) || 0) - (Number(order.deliveryFee) || 0);
+    const earned = pointsFor(loyalty, productsPaid);
     const referral = loyalty.referralEnabled ? await tx.get(`referrals/${uid}`) : null;
     const qualifies = referral?.data.status === 'pending'
-      && (Number(order.total) || 0) >= loyalty.referralMinTotal;
+      && productsPaid >= loyalty.referralMinTotal;
     const referrerUid = qualifies ? referral.data.referrerUid : '';
     const [wallet, referrerWallet] = await Promise.all([
       tx.get(`wallets/${uid}`),

@@ -5,6 +5,7 @@
 // مو من التطبيق، حتى محد يكدر يغير السعر أو يستعمل كوبون أو نقاط مو إله.
 
 import { ConflictError } from './db.js';
+import { deliveryZones, findZone } from './delivery.js';
 import { computeQuote, COUPON_CODE, loyaltySettings, normalizeCode, phoneKey } from './pricing.js';
 
 export const WEEK_DAYS = ['السبت', 'الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'];
@@ -76,15 +77,24 @@ const useKeys = (uid, phone) => [uid && `u_${uid}`, phoneKey(phone) && `p_${phon
  * يقرا كل اللي يحتاجه الحساب (بمعاملة إذا انطت tx) ويحسب.
  * reader: db أو tx (عدهم get وquery بنفس الشكل).
  */
-async function loadAndQuote(reader, { user, lines, couponCode, requestedPoints, phone, now }) {
+async function loadAndQuote(reader, {
+  user, lines, couponCode, requestedPoints, phone, now, pickupMethod = 'delivery', zoneId = '', requireZone = false,
+}) {
   const uid = user && !user.anonymous ? user.uid : '';
   const ids = [...new Set(lines.map((l) => l.productId))];
-  const [productDocs, settingsDoc, walletDoc, couponDoc] = await Promise.all([
+  const [productDocs, settingsDoc, walletDoc, couponDoc, deliveryDoc] = await Promise.all([
     Promise.all(ids.map((id) => reader.get(`products/${id}`))),
     reader.get('settings/loyalty'),
     uid ? reader.get(`wallets/${uid}`) : null,
     couponCode ? reader.get(`coupons/${couponCode}`) : null,
+    pickupMethod === 'delivery' && zoneId ? reader.get('settings/delivery') : null,
   ]);
+  // أجور التوصيل من إعدادات المتجر، مو من التطبيق. الاستلام من المحل بلا أجور.
+  let zone = null;
+  if (pickupMethod === 'delivery') {
+    zone = zoneId ? findZone(deliveryZones(deliveryDoc?.data), zoneId) : null;
+    if (!zone && (requireZone || zoneId)) throw new OrderError(400, 'invalid_zone', 'اختار المحافظة');
+  }
   const products = new Map(ids.map((id, i) => [id, productDocs[i]?.data || null]));
   const loyalty = loyaltySettings(settingsDoc?.data);
   const wallet = walletDoc?.data || {};
@@ -111,8 +121,9 @@ async function loadAndQuote(reader, { user, lines, couponCode, requestedPoints, 
     balance: Number(wallet.points) || 0,
     requestedPoints,
     now,
+    deliveryFee: zone?.fee || 0,
   });
-  return { quote, uid, loyalty, wallet, walletDoc, couponDoc, useDocs };
+  return { quote: { ...quote, zone }, uid, loyalty, wallet, walletDoc, couponDoc, useDocs };
 }
 
 /** أول طلب للزبون؟ بالحساب وبرقم الهاتف. */
@@ -135,6 +146,9 @@ export function publicQuote(quote) {
     couponError: quote.couponError,
     points: quote.points,
     maxPoints: quote.maxPoints,
+    deliveryFee: quote.deliveryFee,
+    deliveryCharged: quote.deliveryCharged,
+    zone: quote.zone ? { id: quote.zone.id, name: quote.zone.name } : null,
     total: quote.total,
     pointsToEarn: quote.pointsToEarn,
   };
@@ -150,6 +164,8 @@ export async function quoteOrder(ctx, user, body) {
     requestedPoints: body?.points,
     phone: text(body?.phone, 20),
     now: ctx.now,
+    pickupMethod: body?.pickupMethod === 'pickup' ? 'pickup' : 'delivery',
+    zoneId: typeof body?.zoneId === 'string' ? body.zoneId : '',
   });
   return { ...publicQuote(quote), balance: Number(wallet.points) || 0 };
 }
@@ -177,11 +193,13 @@ export async function placeOrder(ctx, user, body) {
   const lines = parseLines(body?.items);
   const couponCode = parseCoupon(body?.coupon);
   const pushToken = typeof body?.pushToken === 'string' && body.pushToken.length <= 4096 ? body.pushToken : '';
+  const zoneId = pickupMethod === 'delivery' && typeof body?.zoneId === 'string' ? body.zoneId : '';
+  if (pickupMethod === 'delivery' && !zoneId) throw new OrderError(400, 'invalid_zone', 'اختار المحافظة');
   const now = ctx.now;
   const orderPath = `orders/${requestId}`;
 
   const place = (tx) => createInTransaction(tx, {
-    user, body, requestId, orderPath, customer, lines, couponCode, pickupMethod, pushToken, now,
+    user, body, requestId, orderPath, customer, lines, couponCode, pickupMethod, zoneId, pushToken, now,
   });
 
   // إذا طلبات كثيرة سوا على نفس الكوبون أو نفس المحفظة، المعاملة ممكن تتعارض وتنعاد.
@@ -192,7 +210,7 @@ export async function placeOrder(ctx, user, body) {
   for (let attempt = 1; ; attempt++) {
     if (attempt > 1 && !(await ctx.db.get(orderPath))) {
       const { quote } = await loadAndQuote(ctx.db, {
-        user, lines, couponCode, requestedPoints: body?.points, phone: customer.phone, now,
+        user, lines, couponCode, requestedPoints: body?.points, phone: customer.phone, now, pickupMethod, zoneId, requireZone: true,
       });
       checkQuote(quote, body);
     }
@@ -228,7 +246,7 @@ function checkQuote(quote, body) {
 
 /** داخل المعاملة: يتأكد ويكتب الطلب والنقاط والكوبون سوا. */
 async function createInTransaction(tx, {
-  user, body, requestId, orderPath, customer, lines, couponCode, pickupMethod, pushToken, now,
+  user, body, requestId, orderPath, customer, lines, couponCode, pickupMethod, zoneId, pushToken, now,
 }) {
   const existing = await tx.get(orderPath);
   if (existing) {
@@ -241,7 +259,7 @@ async function createInTransaction(tx, {
   }
 
   const loaded = await loadAndQuote(tx, {
-    user, lines, couponCode, requestedPoints: body?.points, phone: customer.phone, now,
+    user, lines, couponCode, requestedPoints: body?.points, phone: customer.phone, now, pickupMethod, zoneId, requireZone: true,
   });
   const { quote, uid, wallet, walletDoc, couponDoc, useDocs } = loaded;
   checkQuote(quote, body);
@@ -253,6 +271,9 @@ async function createInTransaction(tx, {
     discount: (quote.coupon?.amount || 0) + (quote.points?.amount || 0),
     ...(quote.coupon ? { coupon: quote.coupon } : {}),
     ...(quote.points ? { pointsUsed: quote.points.points, pointsDiscount: quote.points.amount } : {}),
+    // أجور التوصيل اللي يدفعها (0 للاستلام أو إذا كوبون توصيل مجاني)، والمحافظة.
+    deliveryFee: quote.deliveryCharged,
+    ...(quote.zone ? { deliveryZone: { id: quote.zone.id, name: quote.zone.name, fee: quote.zone.fee } } : {}),
     total: quote.total,
     status: 'new',
     statusHistory: [{ status: 'new', at: now }],
@@ -315,6 +336,9 @@ export function trackingView(orderId, order) {
     items: (order.items || []).map(({ productId, name, price, quantity }) => ({ productId, name, price, quantity })),
     subtotal: order.subtotal ?? order.total,
     discount: order.discount || 0,
+    deliveryFee: order.deliveryFee || 0,
+    deliveryZone: order.deliveryZone?.name || '',
+    freeDelivery: Boolean(order.coupon?.freeDelivery),
     total: order.total,
   };
 }

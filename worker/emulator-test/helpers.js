@@ -72,7 +72,9 @@ export function orderBody(overrides = {}) {
     customer: customer(),
     items: [{ productId: 'p1', quantity: 2 }],
     deliveryDay: 'الخميس',
-    pickupMethod: 'delivery',
+    // الاستلام من المحل بلا أجور توصيل، حتى أرقام الاختبارات القديمة تبقى نفسها.
+    // اختبارات التوصيل تحط pickupMethod: 'delivery' ويا zoneId.
+    pickupMethod: 'pickup',
     pushToken: 'device-token-1',
     ...overrides,
   };

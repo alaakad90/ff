@@ -100,7 +100,9 @@ describe('placing orders', () => {
   it('validates the customer, day and pickup method', async () => {
     assert.equal((await api('/api/orders', orderBody({ customer: { name: 'x', phone: '123' } }))).status, 400);
     assert.equal((await api('/api/orders', orderBody({ deliveryDay: 'Monday' }))).status, 400);
-    assert.equal((await api('/api/orders', orderBody({ customer: { name: 'x', phone: '07701234567' } }))).status, 400, 'delivery needs an address');
+    assert.equal((await api('/api/orders', orderBody({
+      pickupMethod: 'delivery', zoneId: 'baghdad', customer: { name: 'x', phone: '07701234567' },
+    }))).status, 400, 'delivery needs an address');
     const pickup = await api('/api/orders', orderBody({ pickupMethod: 'pickup', customer: { name: 'x', phone: '07701234567' } }));
     assert.equal(pickup.status, 200);
     assert.equal((await api('/api/orders', orderBody({ requestId: 'short' }))).status, 400);
@@ -210,7 +212,7 @@ describe('order status, notifications and rewards', () => {
   });
 
   it('each status notifies the customer once, and keeps a timeline', async () => {
-    const id = await place();
+    const id = await place('uid:u1', { pickupMethod: 'delivery', zoneId: 'baghdad' });
     for (const status of ['confirmed', 'confirmed', 'delivering', 'confirmed']) {
       const res = await api('/api/admin/order-status', { orderId: id, status }, admin);
       assert.equal(res.status, 200, JSON.stringify(res.body));
@@ -336,6 +338,87 @@ describe('referrals', () => {
     }
     assert.equal((await db.get('wallets/a')).data.points, 400, 'limit is 2 friends');
     assert.equal((await db.get('referrals/f3')).data.status, 'capped');
+  });
+});
+
+describe('delivery fees', () => {
+  const delivery = (zoneId, extra = {}) => orderBody({ pickupMethod: 'delivery', zoneId, ...extra });
+
+  it('Diwaniya center 2,000, districts 4,000, other governorates 5,000, pickup free', async () => {
+    const quote = (body) => api('/api/quote', body).then((r) => r.body);
+    const items = [{ productId: 'p2', quantity: 1 }]; // 20,000
+    assert.deepEqual(
+      [await quote({ items, pickupMethod: 'delivery', zoneId: 'diwaniyah-center' }),
+        await quote({ items, pickupMethod: 'delivery', zoneId: 'diwaniyah-districts' }),
+        await quote({ items, pickupMethod: 'delivery', zoneId: 'basra' }),
+        await quote({ items, pickupMethod: 'pickup', zoneId: 'basra' })].map((q) => [q.deliveryFee, q.total]),
+      [[2000, 22000], [4000, 24000], [5000, 25000], [0, 20000]],
+    );
+  });
+
+  it('saves the zone and fee on the order and in the Telegram message', async () => {
+    const body = delivery('diwaniyah-center');
+    const res = await api('/api/orders', body);
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.equal(res.body.total, 72000);
+    const order = (await db.get(`orders/${body.requestId}`)).data;
+    assert.equal(order.deliveryFee, 2000);
+    assert.deepEqual(order.deliveryZone, { id: 'diwaniyah-center', name: 'الديوانية - المركز', fee: 2000 });
+    assert.equal(order.subtotal, 70000);
+    assert.match(sent.telegram[0].text, /المحافظة: الديوانية - المركز/);
+    assert.match(sent.telegram[0].text, /التوصيل: 2,000 د.ع/);
+    assert.match(sent.telegram[0].text, /المجموع: 72,000 د.ع/);
+  });
+
+  it('a delivery order needs a known, active governorate', async () => {
+    await seed({ 'settings/delivery': { zones: [{ id: 'baghdad', name: 'بغداد', fee: 5000, active: false }] } });
+    assert.equal((await api('/api/orders', delivery(undefined))).body.code, 'invalid_zone');
+    assert.equal((await api('/api/orders', delivery('mars'))).body.code, 'invalid_zone');
+    assert.equal((await api('/api/orders', delivery('baghdad'))).body.code, 'invalid_zone', 'switched off');
+  });
+
+  it('the owner\'s fees from the control panel are used, not the app\'s', async () => {
+    await seed({ 'settings/delivery': { zones: [
+      { id: 'diwaniyah-center', name: 'الديوانية - المركز', fee: 3000, active: true },
+      { id: 'afak', name: 'الديوانية - عفك', fee: 3500, active: true },
+    ] } });
+    const body = delivery('afak', { deliveryFee: 0, expectedTotal: 73500 });
+    const res = await api('/api/orders', body);
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.equal((await db.get(`orders/${body.requestId}`)).data.deliveryFee, 3500);
+  });
+
+  it('coupons and points discount the products only; delivery stays', async () => {
+    await seed({ 'wallets/u1': { points: 1000 } });
+    // 10% من 20,000 = 2,000؛ النقاط لحد 50% من 18,000 = 9,000 = 180 نقطة؛ والتوصيل 5,000 كامل.
+    const q = (await api('/api/quote', {
+      items: [{ productId: 'p2', quantity: 1 }], coupon: 'WELCOME10', points: 1000, pickupMethod: 'delivery', zoneId: 'basra',
+    }, { token: 'uid:u1' })).body;
+    assert.deepEqual([q.coupon.amount, q.points.points, q.points.amount, q.deliveryFee, q.total], [2000, 180, 9000, 5000, 14000]);
+    assert.equal(q.pointsToEarn, 9, 'points are earned on the 9,000 paid for products, not on delivery');
+  });
+
+  it('a free-delivery coupon waives only the delivery fee', async () => {
+    await seed({ 'coupons/FREESHIP': { type: 'freeDelivery', value: 0, usedCount: 0, active: true, perUserLimit: 1 } });
+    const body = delivery('basra', { coupon: 'FREESHIP' });
+    const res = await api('/api/orders', body);
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.equal(res.body.total, 70000);
+    const order = (await db.get(`orders/${body.requestId}`)).data;
+    assert.equal(order.deliveryFee, 0);
+    assert.deepEqual(order.coupon, { code: 'FREESHIP', amount: 5000, freeDelivery: true });
+    assert.match(sent.telegram[0].text, /FREESHIP: توصيل مجاني/);
+    assert.equal((await db.get('coupons/FREESHIP')).data.usedCount, 1);
+
+    const pickup = await api('/api/quote', { items: [{ productId: 'p1', quantity: 1 }], coupon: 'FREESHIP', pickupMethod: 'pickup' });
+    assert.equal(pickup.body.couponError.code, 'no_delivery');
+  });
+
+  it('points on delivery orders are earned on products only', async () => {
+    const body = delivery('basra');
+    await api('/api/orders', body, { token: 'uid:u7' });
+    await api('/api/admin/order-status', { orderId: body.requestId, status: 'done' }, admin);
+    assert.equal((await db.get('wallets/u7')).data.points, 70, '70,000 of products, not 75,000');
   });
 });
 

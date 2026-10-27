@@ -28,6 +28,7 @@ export function buildMessage(orderId, order) {
   lines.push('');
   if (order.deliveryDay) lines.push(`📅 يوم التسليم: ${order.deliveryDay}`);
   lines.push(`🚚 طريقة الاستلام: ${PICKUP_LABELS[order.pickupMethod] || PICKUP_LABELS.delivery}`);
+  if (order.deliveryZone?.name) lines.push(`🗺️ المحافظة: ${order.deliveryZone.name}`);
   lines.push('');
   lines.push(`👤 الاسم: ${customer.name || ''}`);
   lines.push(`📞 الهاتف: ${customer.phone || ''}`);
@@ -44,12 +45,18 @@ export function buildMessage(orderId, order) {
     if (item.voiceUrl) lines.push(`   🎤 فويس: ${item.voiceUrl}`);
   }
   lines.push('');
-  if (Number(order.discount) > 0) {
-    lines.push(`🧾 قبل الخصم: ${formatPrice(Number(order.subtotal) || 0)}`);
-    if (order.coupon?.code) lines.push(`🏷️ كوبون ${order.coupon.code}: -${formatPrice(Number(order.coupon.amount) || 0)}`);
+  const hasDelivery = order.deliveryZone || Number(order.deliveryFee) > 0;
+  if (Number(order.discount) > 0 || hasDelivery) {
+    lines.push(`🧾 المنتجات: ${formatPrice(Number(order.subtotal) || 0)}`);
+    if (order.coupon?.code) {
+      lines.push(order.coupon.freeDelivery
+        ? `🏷️ كوبون ${order.coupon.code}: توصيل مجاني`
+        : `🏷️ كوبون ${order.coupon.code}: -${formatPrice(Number(order.coupon.amount) || 0)}`);
+    }
     if (Number(order.pointsUsed) > 0) {
       lines.push(`⭐ ${order.pointsUsed} نقطة: -${formatPrice(Number(order.pointsDiscount) || 0)}`);
     }
+    if (hasDelivery) lines.push(`🚚 التوصيل: ${Number(order.deliveryFee) > 0 ? formatPrice(Number(order.deliveryFee)) : 'مجاني'}`);
   }
   lines.push(`💰 المجموع: ${formatPrice(Number(order.total) || 0)}`);
   lines.push('💵 الدفع: عند الاستلام');

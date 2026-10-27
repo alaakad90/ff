@@ -69,6 +69,7 @@ const COUPON_ERRORS = {
   first_order: 'الكوبون لأول طلب بس',
   not_yours: 'هذا الكوبون مو إلك',
   sign_in: 'سجل دخول حتى تستعمل هذا الكوبون',
+  no_delivery: 'كوبون التوصيل المجاني للطلبات اللي تنوصل بس',
 };
 
 export function couponMessage(code, coupon) {
@@ -77,10 +78,11 @@ export function couponMessage(code, coupon) {
 }
 
 /**
- * يتحقق من الكوبون ويحسب خصمه. يرجع { amount } أو { error }.
+ * يتحقق من الكوبون ويحسب خصمه. يرجع { amount } أو { amount, freeDelivery } أو { error }.
+ * الخصم على المنتجات بس (subtotal)؛ كوبون التوصيل المجاني يشيل أجور التوصيل (deliveryFee).
  * uses: عدد مرات استعمال هذا الزبون للكوبون (بالحساب أو بالهاتف، الأكثر).
  */
-export function evaluateCoupon(coupon, { subtotal, now, uid, uses = 0, isFirstOrder = true }) {
+export function evaluateCoupon(coupon, { subtotal, now, uid, uses = 0, isFirstOrder = true, deliveryFee = 0 }) {
   if (!coupon) return { error: 'not_found' };
   if (coupon.active === false) return { error: 'inactive' };
   if (coupon.startsAt instanceof Date && now < coupon.startsAt) return { error: 'not_started' };
@@ -96,6 +98,9 @@ export function evaluateCoupon(coupon, { subtotal, now, uid, uses = 0, isFirstOr
   if (coupon.firstOrderOnly && !isFirstOrder) return { error: 'first_order' };
   const minSubtotal = Math.max(0, Math.trunc(Number(coupon.minSubtotal) || 0));
   if (subtotal < minSubtotal) return { error: 'min_subtotal' };
+  if (coupon.type === 'freeDelivery') {
+    return deliveryFee > 0 ? { amount: deliveryFee, freeDelivery: true } : { error: 'no_delivery' };
+  }
 
   const value = Math.max(0, Math.trunc(Number(coupon.value) || 0));
   let amount = coupon.type === 'percent'
@@ -124,11 +129,14 @@ export function pointsFor(loyalty, paid) {
  * الحساب الكامل.
  * lines: [{ productId, quantity, note, imageUrl, voiceUrl }]
  * products: Map(productId → بيانات المنتج من Firestore أو null)
- * يرجع { items, unavailable, subtotal, coupon, couponError, points, total, pointsToEarn, maxPoints }
+ * deliveryFee: أجور التوصيل للمحافظة (0 للاستلام من المحل). الكوبون والنقاط على المنتجات بس،
+ * والتوصيل يبقى ثابت إلا إذا الكوبون "توصيل مجاني".
+ * يرجع { items, unavailable, subtotal, coupon, couponError, points, deliveryFee, deliveryCharged,
+ *        productsTotal, total, pointsToEarn, maxPoints }
  */
 export function computeQuote({
   lines, products, loyalty, coupon = null, couponCode = '', couponUses = 0, isFirstOrder = true,
-  uid = '', balance = 0, requestedPoints = 0, now,
+  uid = '', balance = 0, requestedPoints = 0, now, deliveryFee = 0,
 }) {
   const items = [];
   const unavailable = [];
@@ -154,18 +162,21 @@ export function computeQuote({
   let couponResult = null;
   let couponError = null;
   if (couponCode) {
-    const result = evaluateCoupon(coupon, { subtotal, now, uid, uses: couponUses, isFirstOrder });
+    const result = evaluateCoupon(coupon, { subtotal, now, uid, uses: couponUses, isFirstOrder, deliveryFee });
     if (result.error) couponError = { code: result.error, message: couponMessage(result.error, coupon) };
-    else couponResult = { code: couponCode, amount: result.amount };
+    else couponResult = { code: couponCode, amount: result.amount, ...(result.freeDelivery ? { freeDelivery: true } : {}) };
   }
-  const afterCoupon = subtotal - (couponResult?.amount || 0);
+  const productDiscount = couponResult && !couponResult.freeDelivery ? couponResult.amount : 0;
+  const afterCoupon = subtotal - productDiscount;
 
   const maxPoints = uid ? maxRedeemablePoints(loyalty, afterCoupon, balance) : 0;
   const usedPoints = Math.min(Math.max(0, Math.trunc(Number(requestedPoints) || 0)), maxPoints);
   const points = usedPoints > 0 && usedPoints >= loyalty.minRedeemPoints
     ? { points: usedPoints, amount: Math.min(usedPoints * loyalty.pointValue, afterCoupon) }
     : null;
-  const total = afterCoupon - (points?.amount || 0);
+  const productsTotal = afterCoupon - (points?.amount || 0);
+  const fee = Math.max(0, Math.trunc(Number(deliveryFee) || 0));
+  const deliveryCharged = couponResult?.freeDelivery ? 0 : fee;
 
   return {
     items,
@@ -174,8 +185,12 @@ export function computeQuote({
     coupon: couponResult,
     couponError,
     points,
-    total,
+    deliveryFee: fee,
+    deliveryCharged,
+    productsTotal,
+    total: productsTotal + deliveryCharged,
     maxPoints,
-    pointsToEarn: uid ? pointsFor(loyalty, total) : 0,
+    // النقاط على اللي ندفع للمنتجات، مو على التوصيل.
+    pointsToEarn: uid ? pointsFor(loyalty, productsTotal) : 0,
   };
 }

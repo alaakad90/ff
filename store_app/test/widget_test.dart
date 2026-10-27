@@ -345,7 +345,8 @@ void main() {
     final fields = find.byType(TextFormField);
     await tester.enterText(fields.at(0), 'علي');
     await tester.enterText(fields.at(1), '07701234567');
-    await tester.enterText(fields.at(2), 'بغداد، الكرادة');
+    await pickGovernorate(tester, 'بغداد');
+    await tester.enterText(find.widgetWithText(TextFormField, 'الحي والمنطقة وتفاصيل العنوان'), 'الكرادة');
 
     // بدون يوم ما يرسل.
     await tester.ensureVisible(find.text('أرسل الطلب'));
@@ -364,7 +365,9 @@ void main() {
     final order = repo.orders.single;
     expect(order.deliveryDay, 'الخميس');
     expect(order.pickupMethod, PickupMethod.delivery);
+    // بدون سيرفر: المحافظة تنكتب بالعنوان، وأجورها (5,000) تنضاف للمجموع.
     expect(order.customer.address, 'بغداد، الكرادة');
+    expect(order.total, 25000 + 5000);
     expect(order.userId, isEmpty);
     expect(notifier.sent.single.id, order.id);
     expect(push.asked, 1);
