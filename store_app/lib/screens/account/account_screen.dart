@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import '../../models/content.dart';
 import '../../services/auth_service.dart';
 import '../../services/store_repository.dart';
+import '../../state/theme_settings.dart';
+import '../../widgets/brand_logo.dart';
 import '../about_screen.dart';
 import '../admin/admin_home.dart';
 import 'guest_orders_screen.dart';
@@ -43,6 +45,8 @@ class _GuestAccount extends StatelessWidget {
           Card(
             child: Column(
               children: [
+                ThemeModeTile(settings: context.read<ThemeSettings>()),
+                const Divider(height: 1),
                 ListTile(
                   leading: const Icon(Icons.local_shipping_outlined),
                   title: const Text('تتبع طلباتي'),
@@ -121,6 +125,8 @@ class _CustomerAccount extends StatelessWidget {
                   trailing: const Icon(Icons.chevron_left),
                   onTap: () => _push(context, WalletScreen(userId: session.uid)),
                 ),
+                const Divider(height: 1),
+                ThemeModeTile(settings: context.read<ThemeSettings>()),
                 const Divider(height: 1),
                 ListTile(
                   leading: const Icon(Icons.badge_outlined),
@@ -342,7 +348,7 @@ class _AuthFormState extends State<AuthForm> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Image.asset('assets/images/logo.png', height: 72),
+          const BrandLogo(height: 72),
           const SizedBox(height: 16),
           Text(
             _signUp ? 'سوي حساب حتى تتابع طلباتك' : 'سجل دخول حتى تتابع طلباتك',

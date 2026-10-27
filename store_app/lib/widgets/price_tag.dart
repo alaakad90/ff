@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../theme.dart';
+
 import '../models/product.dart';
 
 /// السعر: الحالي، وإذا عليه تخفيض السعر القديم مشطوب ويا نسبة التخفيض.
@@ -37,7 +39,7 @@ class PriceTag extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
               decoration: BoxDecoration(
-                color: theme.colorScheme.error,
+                color: brandRed,
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(

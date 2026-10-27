@@ -97,8 +97,8 @@ class CategoryAvatar extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: selected ? colors.secondary : Colors.white,
-        border: Border.all(color: selected ? colors.secondary : Colors.black12),
+        color: selected ? colors.secondary : Theme.of(context).cardTheme.color,
+        border: Border.all(color: selected ? colors.secondary : colors.outlineVariant),
       ),
       clipBehavior: Clip.antiAlias,
       child: NetImage(

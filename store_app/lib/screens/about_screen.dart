@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/content.dart';
 import '../services/contact.dart';
 import '../services/order_service.dart';
+import '../widgets/brand_logo.dart';
 
 class AboutScreen extends StatelessWidget {
   const AboutScreen({super.key});
@@ -30,7 +31,7 @@ class AboutScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          Image.asset('assets/images/logo.png', height: 110),
+          const BrandLogo(height: 110),
           const SizedBox(height: 24),
           if (info.about.isNotEmpty) ...[
             Text(info.about, style: theme.textTheme.bodyLarge?.copyWith(height: 1.7)),
@@ -58,6 +59,19 @@ class AboutScreen extends StatelessWidget {
                 icon: const Icon(Icons.call),
                 label: const Text('اتصل بينا'),
                 onPressed: () => callPhone(info.phone),
+              ),
+            ),
+          if (info.facebook.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(52),
+                  foregroundColor: const Color(0xFF1877F2),
+                ),
+                icon: const Icon(Icons.facebook),
+                label: const Text('تابعنا على فيسبوك'),
+                onPressed: () => openLink(facebookUrl(info.facebook)),
               ),
             ),
           if (info.instagram.isNotEmpty)

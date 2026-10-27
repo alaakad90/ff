@@ -8,7 +8,7 @@ import {
   assertFails, assertSucceeds, initializeTestEnvironment,
 } from '@firebase/rules-unit-testing';
 import {
-  addDoc, collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc, Timestamp, updateDoc, where,
+  addDoc, collection, deleteDoc, doc, getDoc, getDocs, query, serverTimestamp, setDoc, Timestamp, updateDoc, where,
 } from 'firebase/firestore';
 
 import { HOST } from './helpers.js';
@@ -116,6 +116,8 @@ describe('coupons', () => {
     await assertFails(updateDoc(doc(admin, 'coupons/SECRET'), { usedCount: 0 }));
     await assertSucceeds(updateDoc(doc(admin, 'coupons/SECRET'), { active: false }));
     await assertFails(setDoc(doc(as('u1'), 'coupons/MINE'), coupon));
+    await assertFails(deleteDoc(doc(as('u1'), 'coupons/SECRET')));
+    await assertSucceeds(deleteDoc(doc(admin, 'coupons/SECRET')));
     await assertFails(getDoc(doc(as('u1'), 'coupons/SECRET/uses/u_u1')));
   });
 });
@@ -133,6 +135,10 @@ describe('referrals and smart offers', () => {
     await assertSucceeds(getDocs(collection(as(), 'recommendationRules')));
     await assertFails(setDoc(doc(as('u1'), 'recommendationRules/r1'), { title: 'x' }));
     await assertSucceeds(setDoc(doc(as('admin1'), 'recommendationRules/r1'), { title: 'x' }));
+    await assertFails(deleteDoc(doc(as('u1'), 'recommendationRules/r1')));
+    await assertSucceeds(deleteDoc(doc(as('admin1'), 'recommendationRules/r1')));
+    await assertFails(deleteDoc(doc(as('u1'), 'orders/old1')));
+    await assertSucceeds(deleteDoc(doc(as('admin1'), 'orders/old1')));
     await assertSucceeds(setDoc(doc(as('admin1'), 'settings/loyalty'), { pointsPer1000: 2 }));
     await assertFails(setDoc(doc(as('u1'), 'settings/loyalty'), { pointsPer1000: 2 }));
   });

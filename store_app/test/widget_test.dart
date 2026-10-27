@@ -21,6 +21,7 @@ import 'package:lacasa_store/services/order_service.dart';
 import 'package:lacasa_store/services/store_repository.dart';
 import 'package:lacasa_store/services/visit_tracker.dart';
 import 'package:lacasa_store/state/cart.dart';
+import 'package:lacasa_store/state/theme_settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'fakes.dart';
@@ -325,6 +326,45 @@ void main() {
     await tester.tap(find.byType(TextFormField).at(0));
     await tester.pumpAndSettle();
     expect(tester.testTextInput.isVisible, isTrue);
+  });
+
+  testWidgets('customer picks dark, light or system appearance from the account page', (tester) async {
+    usePhoneSize(tester);
+    final settings = ThemeSettings();
+    await tester.pumpWidget(app(InMemoryStoreRepository(), themeSettings: settings));
+    await tester.pumpAndSettle();
+    Brightness brightness() => Theme.of(tester.element(find.byType(NavigationBar))).brightness;
+    expect(brightness(), Brightness.light, reason: 'test device is light, and the default follows it');
+
+    await tapTab(tester, 'الحساب');
+    await tester.ensureVisible(find.text('المظهر'));
+    await tester.tap(find.text('المظهر'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('ليلي'));
+    await tester.pumpAndSettle();
+    expect(settings.mode, ThemeMode.dark);
+    expect(brightness(), Brightness.dark);
+    expect(find.text('ليلي'), findsOneWidget, reason: 'the tile shows the choice');
+
+    await tester.tap(find.text('المظهر'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('نهاري'));
+    await tester.pumpAndSettle();
+    expect(brightness(), Brightness.light);
+  });
+
+  testWidgets('about page shows a Facebook button when the owner adds the page', (tester) async {
+    usePhoneSize(tester);
+    final repo = InMemoryStoreRepository(info: const StoreInfo(facebook: 'lacasa3d'));
+    await tester.pumpWidget(app(repo));
+    await tester.pumpAndSettle();
+    await tapTab(tester, 'الحساب');
+    await tester.ensureVisible(find.text('عن المتجر'));
+    await tester.tap(find.text('عن المتجر'));
+    await tester.pumpAndSettle();
+    expect(find.text('تابعنا على فيسبوك'), findsOneWidget);
+    expect(facebookUrl('lacasa3d'), 'https://facebook.com/lacasa3d');
+    expect(facebookUrl('https://www.facebook.com/x'), 'https://www.facebook.com/x');
   });
 
   testWidgets('customer orders with a delivery day', (tester) async {

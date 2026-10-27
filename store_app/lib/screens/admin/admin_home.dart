@@ -12,6 +12,7 @@ import '../../services/order_service.dart';
 import '../../services/push_service.dart';
 import '../../services/store_api.dart';
 import '../../services/store_repository.dart';
+import '../../state/theme_settings.dart';
 import '../../widgets/product_grid.dart';
 import '../../widgets/product_image.dart';
 import '../account/my_orders_screen.dart';
@@ -59,6 +60,11 @@ class _AdminHomeState extends State<AdminHome> {
         appBar: AppBar(
           title: const Text('لوحة التحكم'),
           actions: [
+            IconButton(
+              tooltip: 'المظهر',
+              icon: const Icon(Icons.brightness_6_outlined),
+              onPressed: () => pickThemeMode(context, context.read<ThemeSettings>()),
+            ),
             IconButton(
               tooltip: 'تسجيل خروج',
               icon: const Icon(Icons.logout),
@@ -331,6 +337,15 @@ class _OrderCard extends StatelessWidget {
           if (!order.pricedByServer)
             Text('طلب من نسخة قديمة: السعر من التطبيق وبدون نقاط', style: theme.textTheme.bodySmall),
           const SizedBox(height: 12),
+          Align(
+            alignment: AlignmentDirectional.centerEnd,
+            child: TextButton.icon(
+              style: TextButton.styleFrom(foregroundColor: theme.colorScheme.error),
+              icon: const Icon(Icons.delete_outline),
+              label: const Text('حذف الطلب'),
+              onPressed: () => _deleteOrder(context, order),
+            ),
+          ),
           DropdownButtonFormField<OrderStatus>(
             initialValue: order.status,
             decoration: const InputDecoration(labelText: 'حالة الطلب', isDense: true),
@@ -359,6 +374,39 @@ class _OrderCard extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+/// يحذف الطلب نهائياً بعد التأكيد. إذا بيه نقاط أو كوبون وبعده مو ملغي، ننبه إن
+/// الإلغاء يرجعها للزبون والحذف ما يرجعها.
+Future<void> _deleteOrder(BuildContext context, StoreOrder order) async {
+  final holdsRewards = order.pricedByServer &&
+      order.status != OrderStatus.cancelled &&
+      (order.pointsUsed > 0 || order.couponCode.isNotEmpty);
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('حذف الطلب؟'),
+      content: Text([
+        'راح ينحذف طلب ${order.customer.name} (${formatPrice(order.total)}) نهائياً، ويختفي من التقارير.',
+        if (holdsRewards)
+          '⚠️ هذا الطلب بيه نقاط أو كوبون. إذا تريد ترجعها للزبون، غيّر الحالة لـ "ملغي" أول وبعدين احذفه.',
+      ].join('\n\n')),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('لا')),
+        TextButton(
+          style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('احذف'),
+        ),
+      ],
+    ),
+  );
+  if (confirmed != true || !context.mounted) return;
+  try {
+    await context.read<StoreRepository>().deleteOrder(order.id);
+  } catch (_) {
+    if (context.mounted) _showError(context, 'ما كدرنا نحذف الطلب');
   }
 }
 

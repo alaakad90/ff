@@ -33,7 +33,7 @@ class StatusChip extends StatelessWidget {
       label: Text(status.label),
       labelStyle: TextStyle(color: color, fontWeight: FontWeight.w600),
       side: BorderSide(color: color),
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).cardTheme.color,
       visualDensity: VisualDensity.compact,
     );
   }

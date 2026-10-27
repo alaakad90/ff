@@ -5,6 +5,7 @@ import '../models/content.dart';
 import '../models/product.dart';
 import '../services/store_repository.dart';
 import '../widgets/banner_carousel.dart';
+import '../widgets/brand_logo.dart';
 import '../widgets/product_grid.dart';
 import '../widgets/product_image.dart';
 import '../widgets/smart_offers.dart';
@@ -48,7 +49,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
                 child: Row(
                   children: [
-                    Image.asset('assets/images/logo.png', height: 34),
+                    const BrandLogo(height: 34),
                     const Spacer(),
                   ],
                 ),
@@ -171,10 +172,10 @@ class SearchField extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
       child: Material(
-        color: Colors.white,
+        color: Theme.of(context).cardTheme.color,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
-          side: BorderSide(color: Colors.black.withValues(alpha: 0.12)),
+          side: BorderSide(color: colors.outlineVariant),
         ),
         child: InkWell(
           borderRadius: BorderRadius.circular(14),

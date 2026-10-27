@@ -15,6 +15,7 @@ import 'package:lacasa_store/services/order_service.dart';
 import 'package:lacasa_store/services/push_service.dart';
 import 'package:lacasa_store/services/store_api.dart';
 import 'package:lacasa_store/services/store_repository.dart';
+import 'package:lacasa_store/state/theme_settings.dart';
 
 /// حسابات وهمية: الباسورد لازم يكون "secret".
 class FakeAuthService implements AuthService {
@@ -172,6 +173,7 @@ Widget app(
   NoteAttachments? attachments,
   StoreApi? api,
   DeviceHistory? history,
+  ThemeSettings? themeSettings,
   bool showSplash = false,
 }) =>
     StoreApp(
@@ -183,6 +185,7 @@ Widget app(
       attachments: attachments ?? FakeAttachments(),
       api: api,
       history: history ?? MemoryDeviceHistory(),
+      themeSettings: themeSettings ?? ThemeSettings(),
       showSplash: showSplash,
     );
 
