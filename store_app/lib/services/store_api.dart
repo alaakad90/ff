@@ -147,7 +147,8 @@ class OrderRequest {
         if (customer != null) 'phone': customer!.phone,
         if (deliveryDay.isNotEmpty) 'deliveryDay': deliveryDay,
         'pickupMethod': pickupMethod.value,
-        if (pickupMethod == PickupMethod.delivery && zoneId.isNotEmpty) 'zoneId': zoneId,
+        // دايماً للتوصيل (حتى لو فارغ): السيرفر يعرف إنها نسخة جديدة، فما يقبل توصيل بلا محافظة.
+        if (pickupMethod == PickupMethod.delivery) 'zoneId': zoneId,
         if (coupon.isNotEmpty) 'coupon': coupon,
         if (points > 0) 'points': points,
         'expectedTotal': ?expectedTotal,

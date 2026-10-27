@@ -29,6 +29,7 @@ export function buildMessage(orderId, order) {
   if (order.deliveryDay) lines.push(`📅 يوم التسليم: ${order.deliveryDay}`);
   lines.push(`🚚 طريقة الاستلام: ${PICKUP_LABELS[order.pickupMethod] || PICKUP_LABELS.delivery}`);
   if (order.deliveryZone?.name) lines.push(`🗺️ المحافظة: ${order.deliveryZone.name}`);
+  if (order.deliveryZoneMissing) lines.push('⚠️ نسخة قديمة من التطبيق: المحافظة ما محددة وأجور التوصيل ما انحسبت');
   lines.push('');
   lines.push(`👤 الاسم: ${customer.name || ''}`);
   lines.push(`📞 الهاتف: ${customer.phone || ''}`);

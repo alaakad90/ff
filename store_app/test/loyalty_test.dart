@@ -631,6 +631,7 @@ void main() {
       expect(jsonDecode(calls.single.body), {
         'items': [{'productId': 'ck', 'quantity': 1}],
         'pickupMethod': 'delivery',
+        'zoneId': '',
         'coupon': 'EID10',
       }, reason: 'no prices are sent');
       expect((quote.total, quote.couponAmount, quote.maxPoints, quote.balance), (46000, 4000, 120, 300));

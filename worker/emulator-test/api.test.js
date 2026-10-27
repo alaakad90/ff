@@ -370,9 +370,23 @@ describe('delivery fees', () => {
     assert.match(sent.telegram[0].text, /المجموع: 72,000 د.ع/);
   });
 
+  it('old app builds (no governorate) still order, without a fee, until the owner switches them off', async () => {
+    const old = orderBody({ pickupMethod: 'delivery' }); // بدون zoneId أصلاً، مثل النسخة القديمة
+    const res = await api('/api/orders', old);
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    const order = (await db.get(`orders/${old.requestId}`)).data;
+    assert.equal(order.deliveryFee, 0);
+    assert.equal(order.deliveryZoneMissing, true);
+    assert.match(sent.telegram[0].text, /نسخة قديمة من التطبيق/);
+
+    await seed({ 'settings/orders': { legacyClientOrders: false } });
+    const blocked = await api('/api/orders', orderBody({ pickupMethod: 'delivery' }));
+    assert.equal(blocked.body.code, 'invalid_zone');
+  });
+
   it('a delivery order needs a known, active governorate', async () => {
     await seed({ 'settings/delivery': { zones: [{ id: 'baghdad', name: 'بغداد', fee: 5000, active: false }] } });
-    assert.equal((await api('/api/orders', delivery(undefined))).body.code, 'invalid_zone');
+    assert.equal((await api('/api/orders', delivery(''))).body.code, 'invalid_zone', 'new app sent an empty governorate');
     assert.equal((await api('/api/orders', delivery('mars'))).body.code, 'invalid_zone');
     assert.equal((await api('/api/orders', delivery('baghdad'))).body.code, 'invalid_zone', 'switched off');
   });

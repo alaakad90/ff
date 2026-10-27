@@ -194,12 +194,21 @@ export async function placeOrder(ctx, user, body) {
   const couponCode = parseCoupon(body?.coupon);
   const pushToken = typeof body?.pushToken === 'string' && body.pushToken.length <= 4096 ? body.pushToken : '';
   const zoneId = pickupMethod === 'delivery' && typeof body?.zoneId === 'string' ? body.zoneId : '';
-  if (pickupMethod === 'delivery' && !zoneId) throw new OrderError(400, 'invalid_zone', 'اختار المحافظة');
+  // النسخ القديمة من التطبيق ما ترسل محافظة: نقبل طلبها بلا أجور توصيل (وننبه صاحب المتجر)،
+  // لحد ما يطفي "قبول طلبات النسخ القديمة" من لوحة التحكم.
+  let zoneMissing = false;
+  if (pickupMethod === 'delivery' && !zoneId) {
+    const settings = await ctx.db.get('settings/orders');
+    if (body?.zoneId !== undefined || settings?.data.legacyClientOrders === false) {
+      throw new OrderError(400, 'invalid_zone', 'اختار المحافظة');
+    }
+    zoneMissing = true;
+  }
   const now = ctx.now;
   const orderPath = `orders/${requestId}`;
 
   const place = (tx) => createInTransaction(tx, {
-    user, body, requestId, orderPath, customer, lines, couponCode, pickupMethod, zoneId, pushToken, now,
+    user, body, requestId, orderPath, customer, lines, couponCode, pickupMethod, zoneId, zoneMissing, pushToken, now,
   });
 
   // إذا طلبات كثيرة سوا على نفس الكوبون أو نفس المحفظة، المعاملة ممكن تتعارض وتنعاد.
@@ -210,7 +219,7 @@ export async function placeOrder(ctx, user, body) {
   for (let attempt = 1; ; attempt++) {
     if (attempt > 1 && !(await ctx.db.get(orderPath))) {
       const { quote } = await loadAndQuote(ctx.db, {
-        user, lines, couponCode, requestedPoints: body?.points, phone: customer.phone, now, pickupMethod, zoneId, requireZone: true,
+        user, lines, couponCode, requestedPoints: body?.points, phone: customer.phone, now, pickupMethod, zoneId, requireZone: !zoneMissing,
       });
       checkQuote(quote, body);
     }
@@ -246,7 +255,7 @@ function checkQuote(quote, body) {
 
 /** داخل المعاملة: يتأكد ويكتب الطلب والنقاط والكوبون سوا. */
 async function createInTransaction(tx, {
-  user, body, requestId, orderPath, customer, lines, couponCode, pickupMethod, zoneId, pushToken, now,
+  user, body, requestId, orderPath, customer, lines, couponCode, pickupMethod, zoneId, zoneMissing, pushToken, now,
 }) {
   const existing = await tx.get(orderPath);
   if (existing) {
@@ -259,7 +268,7 @@ async function createInTransaction(tx, {
   }
 
   const loaded = await loadAndQuote(tx, {
-    user, lines, couponCode, requestedPoints: body?.points, phone: customer.phone, now, pickupMethod, zoneId, requireZone: true,
+    user, lines, couponCode, requestedPoints: body?.points, phone: customer.phone, now, pickupMethod, zoneId, requireZone: !zoneMissing,
   });
   const { quote, uid, wallet, walletDoc, couponDoc, useDocs } = loaded;
   checkQuote(quote, body);
@@ -274,6 +283,7 @@ async function createInTransaction(tx, {
     // أجور التوصيل اللي يدفعها (0 للاستلام أو إذا كوبون توصيل مجاني)، والمحافظة.
     deliveryFee: quote.deliveryCharged,
     ...(quote.zone ? { deliveryZone: { id: quote.zone.id, name: quote.zone.name, fee: quote.zone.fee } } : {}),
+    ...(zoneMissing ? { deliveryZoneMissing: true } : {}),
     total: quote.total,
     status: 'new',
     statusHistory: [{ status: 'new', at: now }],
