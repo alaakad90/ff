@@ -16,14 +16,15 @@ class ReorderLine {
     if (p == null || !p.available || p.price <= 0 || !optionsStillValid(p, item.options)) {
       return ReorderChange.unavailable;
     }
-    if (p.price < item.price) return ReorderChange.cheaper;
-    if (p.price > item.price) return ReorderChange.pricier;
+    final now = p.priceWith(item.options);
+    if (now < item.price) return ReorderChange.cheaper;
+    if (now > item.price) return ReorderChange.pricier;
     return ReorderChange.same;
   }
 
   bool get available => change != ReorderChange.unavailable;
 
-  int get currentTotal => available ? product!.price * item.quantity : 0;
+  int get currentTotal => available ? product!.priceWith(item.options) * item.quantity : 0;
 }
 
 /// يقارن الطلب القديم بالمنتجات الحالية: الأسعار الجديدة والمنتجات اللي ما بقت متوفرة.

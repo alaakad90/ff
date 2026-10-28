@@ -6,21 +6,48 @@ import '../../models/product.dart';
 class OptionDraft {
   final TextEditingController name;
   final TextEditingController newChoice = TextEditingController();
+  final TextEditingController newExtra = TextEditingController();
   final List<String> choices;
+  final Map<String, int> extras; // زيادة السعر لكل اختيار
   bool required;
 
-  OptionDraft({String name = '', List<String>? choices, this.required = true})
+  OptionDraft({String name = '', List<String>? choices, Map<String, int>? extras, this.required = true})
       : name = TextEditingController(text: name),
-        choices = choices ?? [];
+        choices = choices ?? [],
+        extras = extras ?? {};
 
   factory OptionDraft.from(ProductOption o) =>
-      OptionDraft(name: o.name, choices: [...o.choices], required: o.required);
+      OptionDraft(name: o.name, choices: [...o.choices], extras: {...o.extras}, required: o.required);
 
-  ProductOption toOption() => ProductOption(name: name.text.trim(), choices: [...choices], required: required);
+  ProductOption toOption() => ProductOption(
+        name: name.text.trim(),
+        choices: [...choices],
+        required: required,
+        extras: {
+          for (final c in choices)
+            if ((extras[c] ?? 0) > 0) c: extras[c]!,
+        },
+      );
+
+  /// يضيف الاختيار المكتوب (وزيادته). إذا الاختيار موجود، تتحدث زيادته بس.
+  void addPending() {
+    final choice = newChoice.text.trim();
+    if (choice.isEmpty) return;
+    if (!choices.contains(choice)) choices.add(choice);
+    final extra = int.tryParse(newExtra.text.replaceAll(',', '').trim()) ?? 0;
+    if (extra > 0) {
+      extras[choice] = extra;
+    } else {
+      extras.remove(choice);
+    }
+    newChoice.clear();
+    newExtra.clear();
+  }
 
   void dispose() {
     name.dispose();
     newChoice.dispose();
+    newExtra.dispose();
   }
 }
 
@@ -37,14 +64,7 @@ class ProductOptionsEditor extends StatefulWidget {
 class _ProductOptionsEditorState extends State<ProductOptionsEditor> {
   List<OptionDraft> get _drafts => widget.drafts;
 
-  void _addChoice(OptionDraft draft) {
-    final choice = draft.newChoice.text.trim();
-    if (choice.isEmpty) return;
-    setState(() {
-      if (!draft.choices.contains(choice)) draft.choices.add(choice);
-      draft.newChoice.clear();
-    });
-  }
+  void _addChoice(OptionDraft draft) => setState(draft.addPending);
 
   void _removeOption(OptionDraft draft) {
     setState(() => _drafts.remove(draft));
@@ -59,7 +79,8 @@ class _ProductOptionsEditorState extends State<ProductOptionsEditor> {
       children: [
         Text('خيارات المنتج', style: theme.textTheme.titleMedium),
         Text(
-          'حقول يختار منها الزبون قبل ما يضيف للسلة، مثل: اللون، نوع الخط، القياس.',
+          'حقول يختار منها الزبون قبل ما يضيف للسلة، مثل: اللون، نوع الخط، القياس.\n'
+          'إذا اختيار سعره أكثر، اكتب الزيادة جنبه. حتى تغير الزيادة، اكتب نفس الاختيار بالزيادة الجديدة.',
           style: theme.textTheme.bodySmall,
         ),
         for (final (i, draft) in _drafts.indexed)
@@ -98,16 +119,32 @@ class _ProductOptionsEditorState extends State<ProductOptionsEditor> {
                     children: [
                       for (final choice in draft.choices)
                         InputChip(
-                          label: Text(choice),
-                          onDeleted: () => setState(() => draft.choices.remove(choice)),
+                          label: Text((draft.extras[choice] ?? 0) > 0
+                              ? '$choice (+${formatPrice(draft.extras[choice]!)})'
+                              : choice),
+                          onDeleted: () => setState(() {
+                            draft.choices.remove(choice);
+                            draft.extras.remove(choice);
+                          }),
                         ),
                     ],
                   ),
                   Row(children: [
                     Expanded(
+                      flex: 3,
                       child: TextField(
                         controller: draft.newChoice,
-                        decoration: const InputDecoration(labelText: 'اختيار جديد', hintText: 'مثلاً: أحمر'),
+                        decoration: const InputDecoration(labelText: 'اختيار جديد', hintText: 'مثلاً: كبير'),
+                        onSubmitted: (_) => _addChoice(draft),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 2,
+                      child: TextField(
+                        controller: draft.newExtra,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'زيادة السعر', hintText: '0', suffixText: 'د.ع'),
                         onSubmitted: (_) => _addChoice(draft),
                       ),
                     ),

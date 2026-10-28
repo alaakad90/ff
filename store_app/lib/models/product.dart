@@ -24,6 +24,11 @@ class Product {
   /// عليه تخفيض: السعر القديم أكبر من الحالي.
   bool get onSale => oldPrice > price && price > 0;
 
+  /// سعر القطعة ويا زيادات الاختيارات (مثل القياس الكبير).
+  int priceWith(Map<String, String> chosen) =>
+      price +
+      chosen.entries.fold(0, (sum, e) => sum + (options.where((o) => o.name == e.key).firstOrNull?.extraFor(e.value) ?? 0));
+
   /// نسبة التخفيض، مثل 20 يعني 20%.
   int get discountPercent => onSale ? ((oldPrice - price) * 100 / oldPrice).round() : 0;
 
@@ -75,8 +80,11 @@ class ProductOption {
   final String name;
   final List<String> choices;
   final bool required; // الزبون لازم يختار قبل ما يضيف للسلة
+  final Map<String, int> extras; // زيادة السعر لبعض الاختيارات، مثل {كبير: 5000}
 
-  const ProductOption({required this.name, required this.choices, this.required = true});
+  const ProductOption({required this.name, required this.choices, this.required = true, this.extras = const {}});
+
+  int extraFor(String choice) => extras[choice] ?? 0;
 
   factory ProductOption.fromMap(Map<String, dynamic> data) => ProductOption(
         name: (data['name'] as String? ?? '').trim(),
@@ -85,9 +93,21 @@ class ProductOption {
             if (c is String && c.trim().isNotEmpty) c.trim(),
         ],
         required: data['required'] as bool? ?? true,
+        extras: {
+          for (final e in (data['extras'] as Map? ?? const {}).entries)
+            if (e.key is String && e.value is num && (e.value as num) > 0) e.key as String: (e.value as num).toInt(),
+        },
       );
 
-  Map<String, dynamic> toMap() => {'name': name, 'choices': choices, 'required': required};
+  Map<String, dynamic> toMap() => {
+        'name': name,
+        'choices': choices,
+        'required': required,
+        'extras': {
+          for (final c in choices)
+            if (extraFor(c) > 0) c: extraFor(c),
+        },
+      };
 }
 
 /// الاختيارات بسطر واحد، مثل: اللون: أحمر، نوع الخط: كوفي

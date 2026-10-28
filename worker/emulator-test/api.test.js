@@ -102,10 +102,13 @@ describe('placing orders', () => {
     const res = await api('/api/orders', orderBody({ items: [{ productId: 'p4', quantity: 1, options }] }));
     assert.equal(res.status, 200, JSON.stringify(res.body));
     const order = await db.get(`orders/${res.body.orderId}`);
-    assert.deepEqual(order.data.items[0].options, options);
+    assert.deepEqual(order.data.items[0].options, [options[0], { ...options[1], extra: 3000 }]);
+    // الخط الديواني يزيد 3,000 على سعر اللوحة (15,000).
+    assert.equal(order.data.items[0].price, 18000);
+    assert.equal(order.data.total, 18000);
     const message = sent.telegram.at(-1).text;
     assert.match(message, /اللون: أسود/);
-    assert.match(message, /نوع الخط: ديواني/);
+    assert.match(message, /نوع الخط: ديواني \(\+3,000 د.ع\)/);
   });
 
   it('refuses options that are not on the product, or a missing required one', async () => {

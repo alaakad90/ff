@@ -20,7 +20,10 @@ class CartItem {
           [String imageUrl = '', String voiceUrl = '', Map<String, String> options = const {}]) =>
       '${product.id}\n$note\n$imageUrl\n$voiceUrl\n${optionsLabel(options)}';
 
-  int get total => product.price * quantity;
+  /// سعر القطعة ويا زيادات الاختيارات.
+  int get unitPrice => product.priceWith(options);
+
+  int get total => unitPrice * quantity;
 }
 
 class Cart extends ChangeNotifier {

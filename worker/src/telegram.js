@@ -41,7 +41,10 @@ export function buildMessage(orderId, order) {
     const quantity = Number(item.quantity) || 0;
     const price = Number(item.price) || 0;
     lines.push(`• ${item.name} × ${quantity} = ${formatPrice(price * quantity)}`);
-    for (const option of item.options || []) lines.push(`   🔹 ${option.name}: ${option.value}`);
+    for (const option of item.options || []) {
+      const extra = Number(option.extra) > 0 ? ` (+${formatPrice(Number(option.extra))})` : '';
+      lines.push(`   🔹 ${option.name}: ${option.value}${extra}`);
+    }
     if (item.note) lines.push(`   📝 ${item.note}`);
     if (item.imageUrl) lines.push(`   🖼️ صورة: ${item.imageUrl}`);
     if (item.voiceUrl) lines.push(`   🎤 فويس: ${item.voiceUrl}`);

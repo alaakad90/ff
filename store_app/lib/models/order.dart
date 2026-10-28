@@ -92,7 +92,7 @@ class OrderItem {
   factory OrderItem.fromCartItem(CartItem item) => OrderItem(
         productId: item.product.id,
         name: item.product.name,
-        price: item.product.price,
+        price: item.unitPrice,
         quantity: item.quantity,
         note: item.note,
         imageUrl: item.imageUrl,

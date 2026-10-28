@@ -156,7 +156,8 @@ async function firstOrder(reader, uid, phone, wallet) {
 /** شكل الحساب اللي يرجع للتطبيق. */
 export function publicQuote(quote) {
   return {
-    items: quote.items.map(({ productId, name, price, quantity }) => ({ productId, name, price, quantity })),
+    items: quote.items.map(({ productId, name, price, quantity, options }) => (
+      { productId, name, price, quantity, ...(options?.length ? { options } : {}) })),
     unavailable: quote.unavailable,
     subtotal: quote.subtotal,
     coupon: quote.coupon,

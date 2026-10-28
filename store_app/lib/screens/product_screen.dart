@@ -92,7 +92,9 @@ class _ProductScreenState extends State<ProductScreen> {
                     children: [
                       for (final choice in option.choices)
                         ChoiceChip(
-                          label: Text(choice),
+                          label: Text(option.extraFor(choice) > 0
+                              ? '$choice (+${formatPrice(option.extraFor(choice))})'
+                              : choice),
                           selected: _selected[option.name] == choice,
                           onSelected: (on) => setState(() {
                             if (on) {
@@ -173,7 +175,7 @@ class _ProductScreenState extends State<ProductScreen> {
                 flex: 3,
                 child: FilledButton.icon(
                   icon: const Icon(Icons.add_shopping_cart),
-                  label: Text('أضف للسلة • ${formatPrice(product.price * _quantity)}'),
+                  label: Text('أضف للسلة • ${formatPrice(product.priceWith(_selected) * _quantity)}'),
                   onPressed: _attaching
                       ? null
                       : () {

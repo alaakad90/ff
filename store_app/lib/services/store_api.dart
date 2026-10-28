@@ -51,8 +51,12 @@ class QuoteLine {
   final String name;
   final int price;
   final int quantity;
+  final Map<String, String> options;
 
-  const QuoteLine(this.productId, this.name, this.price, this.quantity);
+  const QuoteLine(this.productId, this.name, this.price, this.quantity, {this.options = const {}});
+
+  /// يطابق سطر السلة بنفس المنتج ونفس الاختيارات.
+  String get key => '$productId\n${optionsLabel(options)}';
 }
 
 /// حساب السعر من السيرفر: الأسعار الحالية والخصومات والنقاط.
@@ -97,7 +101,8 @@ class OrderQuote {
         items: [
           for (final i in j['items'] as List? ?? const [])
             QuoteLine(i['productId'] as String, i['name'] as String? ?? '', (i['price'] as num).toInt(),
-                (i['quantity'] as num).toInt()),
+                (i['quantity'] as num).toInt(),
+                options: optionsFromList(i['options'])),
         ],
         unavailable: [
           for (final u in j['unavailable'] as List? ?? const [])
@@ -300,6 +305,7 @@ class HttpStoreApi implements StoreApi {
           name: i['name'] as String? ?? '',
           price: (i['price'] as num?)?.toInt() ?? 0,
           quantity: (i['quantity'] as num?)?.toInt() ?? 0,
+          options: optionsFromList(i['options']),
         ),
     ];
     final total = (j['total'] as num?)?.toInt() ?? 0;

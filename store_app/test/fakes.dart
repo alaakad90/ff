@@ -240,7 +240,7 @@ class FakeStoreApi implements StoreApi {
       if (p == null || !p.available) {
         unavailable.add(p?.name ?? line.productId);
       } else {
-        items.add(QuoteLine(p.id, p.name, p.price, line.quantity));
+        items.add(QuoteLine(p.id, p.name, p.priceWith(line.options), line.quantity, options: line.options));
       }
     }
     final subtotal = items.fold(0, (sum, l) => sum + l.price * l.quantity);
@@ -321,7 +321,7 @@ class FakeStoreApi implements StoreApi {
     await repo.putOrder(StoreOrder(
       id: request.requestId,
       customer: request.customer!,
-      items: [for (final l in quote.items) OrderItem(productId: l.productId, name: l.name, price: l.price, quantity: l.quantity)],
+      items: [for (final l in quote.items) OrderItem(productId: l.productId, name: l.name, price: l.price, quantity: l.quantity, options: l.options)],
       total: quote.total,
       subtotal: quote.subtotal,
       couponCode: quote.couponCode,

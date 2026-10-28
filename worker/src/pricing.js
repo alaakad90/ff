@@ -139,6 +139,21 @@ export function validOptions(product, chosen) {
   return fields.every((f) => f?.required === false || chosen.some((c) => c.name === f?.name));
 }
 
+/** زيادة السعر لاختيار معين: رقم صحيح موجب من extras الحقل، وإلا 0. */
+export function choiceExtra(field, value) {
+  const extra = Math.trunc(Number(field?.extras?.[value]));
+  return extra > 0 ? extra : 0;
+}
+
+/** الاختيارات ويا زيادة كل واحد (إذا أكو)، حتى تنحفظ بالطلب وتطلع بالتلگرام. */
+function pricedOptions(product, chosen) {
+  const fields = Array.isArray(product?.options) ? product.options : [];
+  return chosen.map(({ name, value }) => {
+    const extra = choiceExtra(fields.find((f) => f?.name === name), value);
+    return extra ? { name, value, extra } : { name, value };
+  });
+}
+
 /**
  * الحساب الكامل.
  * lines: [{ productId, quantity, note, imageUrl, voiceUrl, options }]
@@ -166,15 +181,17 @@ export function computeQuote({
       unavailable.push({ productId: line.productId, name: String(product.name || ''), reason: 'options' });
       continue;
     }
+    const options = pricedOptions(product, line.options || []);
     items.push({
       productId: line.productId,
       name: String(product.name || ''),
-      price,
+      // سعر القطعة ويا زيادات الاختيارات (مثل القياس الكبير)، من بيانات المنتج نفسها.
+      price: price + options.reduce((sum, o) => sum + (o.extra || 0), 0),
       quantity: line.quantity,
       ...(line.note ? { note: line.note } : {}),
       ...(line.imageUrl ? { imageUrl: line.imageUrl } : {}),
       ...(line.voiceUrl ? { voiceUrl: line.voiceUrl } : {}),
-      ...(line.options?.length ? { options: line.options } : {}),
+      ...(options.length ? { options } : {}),
     });
   }
   const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import {
-  computeQuote, DEFAULT_LOYALTY, validOptions, evaluateCoupon, loyaltySettings, maxRedeemablePoints, phoneKey, pointsFor,
+  choiceExtra, computeQuote, DEFAULT_LOYALTY, validOptions, evaluateCoupon, loyaltySettings, maxRedeemablePoints, phoneKey, pointsFor,
 } from '../src/pricing.js';
 
 const now = new Date('2026-10-26T10:00:00Z');
@@ -174,5 +174,26 @@ describe('product options', () => {
     assert.deepEqual(quote.items[0].options, [{ name: 'اللون', value: 'أسود' }]);
     assert.deepEqual(quote.unavailable, [{ productId: 'b2', name: 'بورد', reason: 'options' }]);
     assert.equal(quote.subtotal, 20000);
+  });
+  it('a choice with an extra price raises the item price, from the product not the app', () => {
+    const sized = {
+      name: 'لوحة', price: 15000,
+      options: [{ name: 'القياس', choices: ['صغير', 'كبير'], extras: { كبير: 5000, صغير: -900 } }],
+    };
+    assert.equal(choiceExtra(sized.options[0], 'كبير'), 5000);
+    assert.equal(choiceExtra(sized.options[0], 'صغير'), 0, 'never a negative extra');
+    const quote = computeQuote({
+      lines: [
+        { productId: 's', quantity: 2, options: [{ name: 'القياس', value: 'كبير', extra: 1 }] },
+        { productId: 's', quantity: 1, options: [{ name: 'القياس', value: 'صغير' }] },
+      ],
+      products: new Map([['s', sized]]),
+      loyalty: DEFAULT_LOYALTY,
+      now,
+    });
+    assert.equal(quote.items[0].price, 20000);
+    assert.deepEqual(quote.items[0].options, [{ name: 'القياس', value: 'كبير', extra: 5000 }]);
+    assert.equal(quote.items[1].price, 15000);
+    assert.equal(quote.subtotal, 55000);
   });
 });

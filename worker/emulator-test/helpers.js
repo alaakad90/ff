@@ -90,7 +90,7 @@ export async function seedStore(extra = {}) {
       name: 'لوحة اسم', price: 15000, available: true, categoryId: 'c1',
       options: [
         { name: 'اللون', choices: ['أبيض', 'أسود'], required: true },
-        { name: 'نوع الخط', choices: ['كوفي', 'ديواني'], required: false },
+        { name: 'نوع الخط', choices: ['كوفي', 'ديواني'], required: false, extras: { ديواني: 3000 } },
       ],
     },
     'settings/loyalty': {

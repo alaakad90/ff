@@ -618,7 +618,10 @@ void main() {
     await show(find.widgetWithText(TextFormField, 'اسم الحقل 2'));
     await tester.enterText(find.widgetWithText(TextFormField, 'اسم الحقل 2'), 'نوع الخط');
     await tester.enterText(find.widgetWithText(TextField, 'اختيار جديد').last, 'كوفي');
+    await tester.enterText(find.widgetWithText(TextField, 'زيادة السعر').last, '3,000');
     await tester.tap(find.byTooltip('أضف الاختيار').last);
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(InputChip, 'كوفي (+3,000 د.ع)'), findsOneWidget);
     await tester.pumpAndSettle();
     await show(find.text('لازم الزبون يختار').last);
     await tester.tap(find.text('لازم الزبون يختار').last);
@@ -631,6 +634,7 @@ void main() {
       'اللون: أبيض/أسود true',
       'نوع الخط: كوفي false',
     ]);
+    expect(saved.options.last.extras, {'كوفي': 3000});
     expect(Product.fromMap('p1', saved.toMap()).options.length, 2, reason: 'survives Firestore round trip');
 
     // الزبون: زر السلة بالشبكة يفتح صفحة المنتج حتى يختار اللون.
@@ -650,11 +654,16 @@ void main() {
     await tester.ensureVisible(find.widgetWithText(ChoiceChip, 'أسود'));
     await tester.tap(find.widgetWithText(ChoiceChip, 'أسود'));
     await tester.pumpAndSettle();
+    // الخط الكوفي يزيد 3,000 على السعر.
+    await tester.ensureVisible(find.widgetWithText(ChoiceChip, 'كوفي (+3,000 د.ع)'));
+    await tester.tap(find.widgetWithText(ChoiceChip, 'كوفي (+3,000 د.ع)'));
+    await tester.pumpAndSettle();
+    expect(find.text('أضف للسلة • 18,000 د.ع'), findsOneWidget);
     await tester.tap(add);
     await tester.pump(const Duration(seconds: 3));
     await tester.pumpAndSettle();
     await tapTab(tester, 'السلة');
-    expect(find.text('🔹 اللون: أسود'), findsOneWidget);
+    expect(find.text('🔹 اللون: أسود، نوع الخط: كوفي'), findsOneWidget);
 
     await tester.pump(const Duration(seconds: 3)); // رسالة "انضاف للسلة" تختفي
     await tester.pumpAndSettle();
@@ -672,7 +681,10 @@ void main() {
     await tester.ensureVisible(find.text('أرسل الطلب'));
     await tester.tap(find.text('أرسل الطلب'));
     await tester.pumpAndSettle();
-    expect(repo.orders.single.items.single.options, {'اللون': 'أسود'});
+    final ordered = repo.orders.single.items.single;
+    expect(ordered.options, {'اللون': 'أسود', 'نوع الخط': 'كوفي'});
+    expect(ordered.price, 18000);
+    expect(repo.orders.single.total, 18000);
   });
 
   testWidgets('admin uploads a product photo from the phone', (tester) async {

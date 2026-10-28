@@ -148,6 +148,13 @@ void main() {
       expect(reorderCartItems(kept).single.options, {'اللون': 'أسود'});
       expect(planReorder(ordered({'اللون': 'ذهبي'}), [sign]).single.available, isFalse, reason: 'choice removed');
       expect(planReorder(ordered({}), [sign]).single.available, isFalse, reason: 'colour now required');
+      // الأسود صار يزيد 2,000: إعادة الطلب تبين السعر الجديد.
+      const pricier = Product(id: 'sg', name: 'لوحة اسم', price: 15000, categoryId: 'boards', options: [
+        ProductOption(name: 'اللون', choices: ['أبيض', 'أسود'], extras: {'أسود': 2000}),
+      ]);
+      final line = planReorder(ordered({'اللون': 'أسود'}), [pricier]).single;
+      expect((line.change, line.currentTotal), (ReorderChange.pricier, 17000));
+      expect(reorderCartItems([line]).single.total, 17000);
     });
 
     testWidgets('customer reorders from their order history', (tester) async {

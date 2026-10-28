@@ -342,7 +342,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     final localFee = _pickup == PickupMethod.delivery ? (_zone?.fee ?? 0) : 0;
     // التوصيل: من السيرفر إذا موجود (مع كوبون التوصيل المجاني)، وإلا من قائمة المحافظات.
     final deliveryCharged = quote?.deliveryCharged ?? localFee;
-    final serverPrice = {for (final l in quote?.items ?? const <QuoteLine>[]) l.productId: l.price};
+    final serverPrice = {for (final l in quote?.items ?? const <QuoteLine>[]) l.key: l.price};
 
     return Scaffold(
       appBar: AppBar(title: Text(_quickOrder ? 'طلب سريع' : 'إكمال الطلب')),
@@ -508,7 +508,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                         child: Row(
                           children: [
                             Expanded(child: Text('${item.product.name} × ${item.quantity}${item.options.isEmpty ? '' : '\n🔹 ${optionsLabel(item.options)}'}${item.note.isEmpty ? '' : '\n📝 ${item.note}'}${item.imageUrl.isEmpty ? '' : '\n🖼️ صورة'}${item.voiceUrl.isEmpty ? '' : '\n🎤 فويس'}')),
-                            if (serverPrice[item.product.id] case final price? when price != item.product.price)
+                            if (serverPrice['${item.product.id}\n${optionsLabel(item.options)}'] case final price?
+                                when price != item.unitPrice)
                               Text(
                                 '${formatPrice(price * item.quantity)}\n(السعر تحدّث)',
                                 textAlign: TextAlign.end,

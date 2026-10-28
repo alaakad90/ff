@@ -87,9 +87,7 @@ class _ProductEditScreenState extends State<ProductEditScreen> {
   void _save() {
     // اختيار مكتوب وما انضغط عليه "+": نضيفه بدال ما يضيع.
     for (final o in _options) {
-      final pending = o.newChoice.text.trim();
-      if (pending.isNotEmpty && !o.choices.contains(pending)) o.choices.add(pending);
-      o.newChoice.clear();
+      o.addPending();
     }
     setState(() {});
     if (!_formKey.currentState!.validate()) return;
