@@ -42,7 +42,10 @@ class OrderDetailsScreen extends StatelessWidget {
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 2),
                       child: Row(children: [
-                        Expanded(child: Text('${item.name} × ${item.quantity}${item.note.isEmpty ? '' : '\n📝 ${item.note}'}')),
+                        Expanded(
+                            child: Text('${item.name} × ${item.quantity}'
+                                '${item.options.isEmpty ? '' : '\n🔹 ${optionsLabel(item.options)}'}'
+                                '${item.note.isEmpty ? '' : '\n📝 ${item.note}'}')),
                         Text(formatPrice(item.total)),
                       ]),
                     ),
@@ -271,7 +274,7 @@ class _ReorderSheet extends StatelessWidget {
                     onPressed: () {
                       final cart = outerContext.read<Cart>();
                       for (final item in items) {
-                        cart.add(item.product, item.quantity, item.note, item.imageUrl, item.voiceUrl);
+                        cart.add(item.product, item.quantity, item.note, item.imageUrl, item.voiceUrl, item.options);
                       }
                       // نبدل للسلة قبل ما نسكر الصفحات (بعدها هالصفحة ما تبقى).
                       AppShell.goTo(outerContext, ShellTab.cart);

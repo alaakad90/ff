@@ -86,6 +86,13 @@ export async function seedStore(extra = {}) {
     'products/p1': { name: 'ساعة خشب', price: 35000, available: true, categoryId: 'c1' },
     'products/p2': { name: 'بورد زواج', price: 20000, available: true, categoryId: 'c2' },
     'products/p3': { name: 'مخفي', price: 10000, available: false, categoryId: 'c1' },
+    'products/p4': {
+      name: 'لوحة اسم', price: 15000, available: true, categoryId: 'c1',
+      options: [
+        { name: 'اللون', choices: ['أبيض', 'أسود'], required: true },
+        { name: 'نوع الخط', choices: ['كوفي', 'ديواني'], required: false, extras: { ديواني: 3000 } },
+      ],
+    },
     'settings/loyalty': {
       enabled: true, pointsPer1000: 1, pointValue: 50, minRedeemPoints: 100, maxRedeemPercent: 50,
       referralEnabled: true, referrerPoints: 200, refereePoints: 100, referralMinTotal: 25000,

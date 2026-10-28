@@ -35,6 +35,7 @@ abstract class StoreRepository {
   Stream<List<StoreOrder>> watchOrders();
   Stream<List<StoreOrder>> watchUserOrders(String userId);
   Future<void> setOrderStatus(String id, OrderStatus status);
+  Future<void> deleteOrder(String id);
 
   Future<UserProfile> getProfile(String userId);
   Future<void> saveProfile(String userId, UserProfile profile);
@@ -70,9 +71,11 @@ abstract class StoreRepository {
   /// المدير: كل الكوبونات. ما نحذف كوبونات، بس نوقفها (حتى تبقى بالتقارير).
   Stream<List<Coupon>> watchCoupons();
   Future<void> saveCoupon(Coupon coupon, {required bool isNew});
+  Future<void> deleteCoupon(String code);
 
   Stream<List<RecommendationRule>> watchRecommendationRules({bool includeHidden = false});
   Future<void> saveRecommendationRule(RecommendationRule rule);
+  Future<void> deleteRecommendationRule(String id);
 
   /// أجور التوصيل لكل محافظة/قضاء (الافتراضي إذا ما محفوظة).
   Stream<List<DeliveryZone>> watchDeliveryZones();
@@ -243,6 +246,9 @@ class FirestoreStoreRepository implements StoreRepository {
       _col('orders').doc(id).update({'status': status.value});
 
   @override
+  Future<void> deleteOrder(String id) => _col('orders').doc(id).delete();
+
+  @override
   Future<UserProfile> getProfile(String userId) async {
     final doc = await _col('users').doc(userId).get();
     return UserProfile.fromMap(doc.data() ?? const {});
@@ -385,6 +391,12 @@ class FirestoreStoreRepository implements StoreRepository {
       if (coupon.assignedTo.isEmpty) 'assignedTo': FieldValue.delete(),
     });
   }
+
+  @override
+  Future<void> deleteCoupon(String code) => _col('coupons').doc(code).delete();
+
+  @override
+  Future<void> deleteRecommendationRule(String id) => _col('recommendationRules').doc(id).delete();
 
   @override
   Stream<List<RecommendationRule>> watchRecommendationRules({bool includeHidden = false}) =>
@@ -544,6 +556,24 @@ class InMemoryStoreRepository implements StoreRepository {
   @override
   Future<void> setOrderStatus(String id, OrderStatus status) {
     _orders[id] = _orders[id]!.copyWith(status: status);
+    return _changed();
+  }
+
+  @override
+  Future<void> deleteOrder(String id) {
+    _orders.remove(id);
+    return _changed();
+  }
+
+  @override
+  Future<void> deleteCoupon(String code) {
+    coupons.remove(code);
+    return _changed();
+  }
+
+  @override
+  Future<void> deleteRecommendationRule(String id) {
+    rules.remove(id);
     return _changed();
   }
 

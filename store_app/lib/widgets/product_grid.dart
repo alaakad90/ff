@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/product.dart';
 import '../screens/product_screen.dart';
 import '../state/cart.dart';
+import '../theme.dart';
 import 'price_tag.dart';
 import 'product_image.dart';
 
@@ -72,7 +73,7 @@ class ProductCard extends StatelessWidget {
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
-                          color: theme.colorScheme.error,
+                          color: brandRed,
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
@@ -115,6 +116,12 @@ class ProductCard extends StatelessWidget {
                     iconSize: 20,
                     icon: const Icon(Icons.add_shopping_cart),
                     onPressed: () {
+                      // منتج بيه خيارات إجبارية (مثل اللون): يفتح صفحته حتى الزبون يختار.
+                      if (product.options.any((o) => o.required)) {
+                        Navigator.of(context)
+                            .push(MaterialPageRoute(builder: (_) => ProductScreen(product: product)));
+                        return;
+                      }
                       context.read<Cart>().add(product);
                       showAddedToCart(context, product);
                     },

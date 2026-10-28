@@ -14,6 +14,7 @@ const PRODUCT_ID = /^[A-Za-z0-9_-]{1,64}$/;
 export const REQUEST_ID = /^[A-Za-z0-9]{16,40}$/;
 const MAX_LINES = 50;
 const MAX_QUANTITY = 99;
+const MAX_OPTIONS = 10;
 
 /** خطأ يرجع للتطبيق بحالة HTTP ورسالة عربية. */
 export class OrderError extends Error {
@@ -41,13 +42,29 @@ export function parseLines(raw) {
     if ((line.imageUrl && !isUrl(line.imageUrl)) || (line.voiceUrl && !isUrl(line.voiceUrl))) {
       throw new OrderError(400, 'invalid_items', 'مرفق غلط بالسلة');
     }
+    const options = parseOptions(line.options);
     return {
       productId: line.productId,
       quantity,
       note: text(line.note, 500),
       imageUrl: line.imageUrl || '',
       voiceUrl: line.voiceUrl || '',
+      ...(options.length ? { options } : {}),
     };
+  });
+}
+
+/** اختيارات الزبون للمنتج: [{ name, value }]. نتأكد منها مقابل المنتج بالحساب (computeQuote). */
+function parseOptions(raw) {
+  if (raw == null) return [];
+  if (!Array.isArray(raw) || raw.length > MAX_OPTIONS) throw new OrderError(400, 'invalid_items', 'خيارات غلط بالسلة');
+  const names = new Set();
+  return raw.map((option) => {
+    const name = text(option?.name, 60);
+    const value = text(option?.value, 100);
+    if (!name || !value || names.has(name)) throw new OrderError(400, 'invalid_items', 'خيارات غلط بالسلة');
+    names.add(name);
+    return { name, value };
   });
 }
 
@@ -139,7 +156,8 @@ async function firstOrder(reader, uid, phone, wallet) {
 /** شكل الحساب اللي يرجع للتطبيق. */
 export function publicQuote(quote) {
   return {
-    items: quote.items.map(({ productId, name, price, quantity }) => ({ productId, name, price, quantity })),
+    items: quote.items.map(({ productId, name, price, quantity, options }) => (
+      { productId, name, price, quantity, ...(options?.length ? { options } : {}) })),
     unavailable: quote.unavailable,
     subtotal: quote.subtotal,
     coupon: quote.coupon,
@@ -239,7 +257,10 @@ export async function placeOrder(ctx, user, body) {
 /** يرفض الطلب إذا الحساب ما يطابق اللي طلبه الزبون (منتج ما متوفر، كوبون، نقاط، سعر تغير). */
 function checkQuote(quote, body) {
   if (quote.unavailable.length) {
-    throw new OrderError(409, 'unavailable', 'بعض المنتجات ما متوفرة هسه', { quote: publicQuote(quote) });
+    const message = quote.unavailable.every((u) => u.reason === 'options')
+      ? 'خيارات بعض المنتجات تغيرت، احذفها من السلة واختارها من جديد'
+      : 'بعض المنتجات ما متوفرة هسه';
+    throw new OrderError(409, 'unavailable', message, { quote: publicQuote(quote) });
   }
   if (quote.couponError) {
     throw new OrderError(409, 'coupon_invalid', quote.couponError.message, { quote: publicQuote(quote) });
@@ -343,7 +364,8 @@ export function trackingView(orderId, order) {
     createdAt: order.createdAt?.toISOString?.() || null,
     deliveryDay: order.deliveryDay || '',
     pickupMethod: order.pickupMethod || 'delivery',
-    items: (order.items || []).map(({ productId, name, price, quantity }) => ({ productId, name, price, quantity })),
+    items: (order.items || []).map(({ productId, name, price, quantity, options }) => (
+      { productId, name, price, quantity, ...(options?.length ? { options } : {}) })),
     subtotal: order.subtotal ?? order.total,
     discount: order.discount || 0,
     deliveryFee: order.deliveryFee || 0,

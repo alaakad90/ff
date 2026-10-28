@@ -13,15 +13,18 @@ class ReorderLine {
 
   ReorderChange get change {
     final p = product;
-    if (p == null || !p.available || p.price <= 0) return ReorderChange.unavailable;
-    if (p.price < item.price) return ReorderChange.cheaper;
-    if (p.price > item.price) return ReorderChange.pricier;
+    if (p == null || !p.available || p.price <= 0 || !optionsStillValid(p, item.options)) {
+      return ReorderChange.unavailable;
+    }
+    final now = p.priceWith(item.options);
+    if (now < item.price) return ReorderChange.cheaper;
+    if (now > item.price) return ReorderChange.pricier;
     return ReorderChange.same;
   }
 
   bool get available => change != ReorderChange.unavailable;
 
-  int get currentTotal => available ? product!.price * item.quantity : 0;
+  int get currentTotal => available ? product!.priceWith(item.options) * item.quantity : 0;
 }
 
 /// يقارن الطلب القديم بالمنتجات الحالية: الأسعار الجديدة والمنتجات اللي ما بقت متوفرة.
@@ -35,5 +38,17 @@ List<CartItem> reorderCartItems(List<ReorderLine> lines) => [
       for (final line in lines)
         if (line.available)
           CartItem(line.product!, line.item.quantity,
-              note: line.item.note, imageUrl: line.item.imageUrl, voiceUrl: line.item.voiceUrl),
+              note: line.item.note,
+              imageUrl: line.item.imageUrl,
+              voiceUrl: line.item.voiceUrl,
+              options: line.item.options),
     ];
+
+/// الاختيارات القديمة بعدها موجودة بالمنتج، والحقول الإجبارية كلها مختارة.
+bool optionsStillValid(Product product, Map<String, String> chosen) {
+  for (final e in chosen.entries) {
+    final field = product.options.where((o) => o.name == e.key).firstOrNull;
+    if (field == null || !field.choices.contains(e.value)) return false;
+  }
+  return product.options.every((o) => !o.required || chosen.containsKey(o.name));
+}

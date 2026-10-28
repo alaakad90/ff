@@ -7,6 +7,7 @@ class Product {
   final String categoryId;
   final String imageUrl;
   final bool available;
+  final List<ProductOption> options; // حقول يختارها الزبون، مثل اللون أو نوع الخط
 
   const Product({
     this.id = '',
@@ -17,10 +18,16 @@ class Product {
     required this.categoryId,
     this.imageUrl = '',
     this.available = true,
+    this.options = const [],
   });
 
   /// عليه تخفيض: السعر القديم أكبر من الحالي.
   bool get onSale => oldPrice > price && price > 0;
+
+  /// سعر القطعة ويا زيادات الاختيارات (مثل القياس الكبير).
+  int priceWith(Map<String, String> chosen) =>
+      price +
+      chosen.entries.fold(0, (sum, e) => sum + (options.where((o) => o.name == e.key).firstOrNull?.extraFor(e.value) ?? 0));
 
   /// نسبة التخفيض، مثل 20 يعني 20%.
   int get discountPercent => onSale ? ((oldPrice - price) * 100 / oldPrice).round() : 0;
@@ -35,6 +42,10 @@ class Product {
       categoryId: data['categoryId'] as String? ?? '',
       imageUrl: data['imageUrl'] as String? ?? '',
       available: data['available'] as bool? ?? true,
+      options: [
+        for (final o in data['options'] as List? ?? const [])
+          if (o is Map) ProductOption.fromMap(Map<String, dynamic>.from(o)),
+      ].where((o) => o.name.isNotEmpty && o.choices.isNotEmpty).toList(),
     );
   }
 
@@ -46,6 +57,7 @@ class Product {
         'categoryId': categoryId,
         'imageUrl': imageUrl,
         'available': available,
+        'options': [for (final o in options) o.toMap()],
       };
 
   Product copyWith({String? id, bool? available}) {
@@ -58,9 +70,59 @@ class Product {
       categoryId: categoryId,
       imageUrl: imageUrl,
       available: available ?? this.available,
+      options: options,
     );
   }
 }
+
+/// حقل يضيفه المدير للمنتج (مثل "اللون") ويا الاختيارات اللي يختار منها الزبون.
+class ProductOption {
+  final String name;
+  final List<String> choices;
+  final bool required; // الزبون لازم يختار قبل ما يضيف للسلة
+  final Map<String, int> extras; // زيادة السعر لبعض الاختيارات، مثل {كبير: 5000}
+
+  const ProductOption({required this.name, required this.choices, this.required = true, this.extras = const {}});
+
+  int extraFor(String choice) => extras[choice] ?? 0;
+
+  factory ProductOption.fromMap(Map<String, dynamic> data) => ProductOption(
+        name: (data['name'] as String? ?? '').trim(),
+        choices: [
+          for (final c in data['choices'] as List? ?? const [])
+            if (c is String && c.trim().isNotEmpty) c.trim(),
+        ],
+        required: data['required'] as bool? ?? true,
+        extras: {
+          for (final e in (data['extras'] as Map? ?? const {}).entries)
+            if (e.key is String && e.value is num && (e.value as num) > 0) e.key as String: (e.value as num).toInt(),
+        },
+      );
+
+  Map<String, dynamic> toMap() => {
+        'name': name,
+        'choices': choices,
+        'required': required,
+        'extras': {
+          for (final c in choices)
+            if (extraFor(c) > 0) c: extraFor(c),
+        },
+      };
+}
+
+/// الاختيارات بسطر واحد، مثل: اللون: أحمر، نوع الخط: كوفي
+String optionsLabel(Map<String, String> options) =>
+    options.entries.map((e) => '${e.key}: ${e.value}').join('، ');
+
+/// الاختيارات من Firestore أو السيرفر: [{name, value}] بنفس الترتيب.
+Map<String, String> optionsFromList(Object? raw) => {
+      for (final o in raw is List ? raw : const [])
+        if (o is Map && o['name'] is String && o['value'] is String) o['name'] as String: o['value'] as String,
+    };
+
+List<Map<String, String>> optionsToList(Map<String, String> options) => [
+      for (final e in options.entries) {'name': e.key, 'value': e.value},
+    ];
 
 /// السعر القديم بعد ما ينزل السعر: إذا المدير نزّل السعر وما كتب سعر قبل التخفيض،
 /// ناخذ السعر اللي چان قبل. وإذا السعر رجع مثل القديم أو أكثر، يروح التخفيض.

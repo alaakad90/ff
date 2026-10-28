@@ -15,6 +15,7 @@ import 'package:lacasa_store/services/order_service.dart';
 import 'package:lacasa_store/services/push_service.dart';
 import 'package:lacasa_store/services/store_api.dart';
 import 'package:lacasa_store/services/store_repository.dart';
+import 'package:lacasa_store/state/theme_settings.dart';
 
 /// حسابات وهمية: الباسورد لازم يكون "secret".
 class FakeAuthService implements AuthService {
@@ -172,6 +173,7 @@ Widget app(
   NoteAttachments? attachments,
   StoreApi? api,
   DeviceHistory? history,
+  ThemeSettings? themeSettings,
   bool showSplash = false,
 }) =>
     StoreApp(
@@ -183,6 +185,7 @@ Widget app(
       attachments: attachments ?? FakeAttachments(),
       api: api,
       history: history ?? MemoryDeviceHistory(),
+      themeSettings: themeSettings ?? ThemeSettings(),
       showSplash: showSplash,
     );
 
@@ -237,7 +240,7 @@ class FakeStoreApi implements StoreApi {
       if (p == null || !p.available) {
         unavailable.add(p?.name ?? line.productId);
       } else {
-        items.add(QuoteLine(p.id, p.name, p.price, line.quantity));
+        items.add(QuoteLine(p.id, p.name, p.priceWith(line.options), line.quantity, options: line.options));
       }
     }
     final subtotal = items.fold(0, (sum, l) => sum + l.price * l.quantity);
@@ -318,7 +321,7 @@ class FakeStoreApi implements StoreApi {
     await repo.putOrder(StoreOrder(
       id: request.requestId,
       customer: request.customer!,
-      items: [for (final l in quote.items) OrderItem(productId: l.productId, name: l.name, price: l.price, quantity: l.quantity)],
+      items: [for (final l in quote.items) OrderItem(productId: l.productId, name: l.name, price: l.price, quantity: l.quantity, options: l.options)],
       total: quote.total,
       subtotal: quote.subtotal,
       couponCode: quote.couponCode,

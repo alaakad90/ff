@@ -19,6 +19,7 @@ import 'services/store_api.dart';
 import 'services/store_repository.dart';
 import 'services/visit_tracker.dart';
 import 'state/cart.dart';
+import 'state/theme_settings.dart';
 import 'theme.dart';
 
 Future<void> main() async {
@@ -29,10 +30,9 @@ Future<void> main() async {
     FirebaseMessaging.onMessage.listen((message) {
       final n = message.notification;
       if (n == null) return;
-      messengerKey.currentState?.showSnackBar(SnackBar(
-        duration: const Duration(seconds: 6),
-        content: Text([n.title, n.body].whereType<String>().join('\n')),
-      ));
+      messengerKey.currentState?.showSnackBar(
+        SnackBar(duration: const Duration(seconds: 6), content: Text([n.title, n.body].whereType<String>().join('\n'))),
+      );
     });
   }
   final repository = FirestoreStoreRepository();
@@ -56,6 +56,7 @@ class StoreApp extends StatelessWidget {
   final NoteAttachments? attachments;
   final StoreApi? api;
   final DeviceHistory? history;
+  final ThemeSettings? themeSettings;
   final bool showSplash;
 
   const StoreApp({
@@ -68,6 +69,7 @@ class StoreApp extends StatelessWidget {
     this.attachments,
     this.api,
     this.history,
+    this.themeSettings,
     this.showSplash = true,
   });
 
@@ -84,6 +86,8 @@ class StoreApp extends StatelessWidget {
         Provider<StoreApi>.value(value: api ?? HttpStoreApi(auth)),
         Provider<DeviceHistory>.value(value: history ?? const PrefsDeviceHistory()),
         ChangeNotifierProvider(create: (_) => Cart()),
+        // المظهر (حسب النظام/نهاري/ليلي) محفوظ على الجهاز.
+        ChangeNotifierProvider<ThemeSettings>(create: (_) => themeSettings ?? (ThemeSettings()..load())),
         StreamProvider<Session>(
           create: (_) => auth.watchSession(),
           initialData: Session.guest,
@@ -101,25 +105,29 @@ class StoreApp extends StatelessWidget {
           catchError: (_, _) => const StoreInfo(),
         ),
       ],
-      child: MaterialApp(
-        title: 'متجر لاكاسا',
-        scaffoldMessengerKey: messengerKey,
-        debugShowCheckedModeBanner: false,
-        locale: const Locale('ar', 'IQ'),
-        supportedLocales: const [Locale('ar', 'IQ')],
-        localizationsDelegates: const [
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
-        theme: buildTheme(),
-        // كيبورد الأرقام والهاتف بالآيفون ما بيه زر "تم": أي ضغطة برّه الحقل تسكّره.
-        builder: (context, child) => GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
-          child: child,
+      child: Consumer<ThemeSettings>(
+        builder: (context, themeSettings, _) => MaterialApp(
+          title: 'متجر لاكاسا',
+          scaffoldMessengerKey: messengerKey,
+          debugShowCheckedModeBanner: false,
+          locale: const Locale('ar', 'IQ'),
+          supportedLocales: const [Locale('ar', 'IQ')],
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          theme: buildTheme(),
+          darkTheme: buildTheme(Brightness.dark),
+          themeMode: themeSettings.mode,
+          // كيبورد الأرقام والهاتف بالآيفون ما بيه زر "تم": أي ضغطة برّه الحقل تسكّره.
+          builder: (context, child) => GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+            child: child,
+          ),
+          home: showSplash ? const SplashScreen(next: AppShell()) : const AppShell(),
         ),
-        home: showSplash ? const SplashScreen(next: AppShell()) : const AppShell(),
       ),
     );
   }

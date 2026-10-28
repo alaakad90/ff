@@ -139,6 +139,7 @@ class StoreInfo {
   final String address;
   final String hours;
   final String instagram;
+  final String facebook; // رابط صفحة الفيسبوك أو اسمها
 
   const StoreInfo({
     this.about = '',
@@ -147,6 +148,7 @@ class StoreInfo {
     this.address = '',
     this.hours = '',
     this.instagram = '',
+    this.facebook = '',
   });
 
   factory StoreInfo.fromMap(Map<String, dynamic> d) => StoreInfo(
@@ -156,6 +158,7 @@ class StoreInfo {
         address: _str(d['address']),
         hours: _str(d['hours']),
         instagram: _str(d['instagram']),
+        facebook: _str(d['facebook']),
       );
 
   Map<String, dynamic> toMap() => {
@@ -165,6 +168,7 @@ class StoreInfo {
         'address': address,
         'hours': hours,
         'instagram': instagram,
+        'facebook': facebook,
       };
 }
 
@@ -180,4 +184,11 @@ class UserProfile {
       UserProfile(name: _str(d['name']), phone: _str(d['phone']), address: _str(d['address']));
 
   Map<String, dynamic> toMap() => {'name': name, 'phone': phone, 'address': address};
+}
+
+/// رابط الفيسبوك: إذا انكتب اسم الصفحة بس، نكمله.
+String facebookUrl(String value) {
+  final v = value.trim();
+  if (v.startsWith('http')) return v;
+  return 'https://facebook.com/${v.replaceAll('@', '')}';
 }

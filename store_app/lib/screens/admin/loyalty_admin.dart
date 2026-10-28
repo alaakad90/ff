@@ -21,6 +21,39 @@ void _saveQuietly(BuildContext context, Future<void> future) {
   });
 }
 
+/// يسأل قبل الحذف، ويحذف، ويرجع للقائمة.
+Future<void> _confirmDelete(BuildContext context, {
+  required String title,
+  required String message,
+  required Future<void> Function() delete,
+}) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(title),
+      content: Text(message),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('لا')),
+        TextButton(
+          style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('احذف'),
+        ),
+      ],
+    ),
+  );
+  if (confirmed != true || !context.mounted) return;
+  final navigator = Navigator.of(context);
+  final messenger = ScaffoldMessenger.of(context);
+  try {
+    await delete();
+    navigator.pop();
+    messenger.showSnackBar(const SnackBar(content: Text('انحذف')));
+  } catch (_) {
+    messenger.showSnackBar(const SnackBar(content: Text('ما كدرنا نحذف')));
+  }
+}
+
 int _parseInt(String text) => int.tryParse(text.replaceAll(RegExp(r'[^\d]'), '')) ?? 0;
 
 // ───────────── الكوبونات ─────────────
@@ -196,7 +229,25 @@ class _CouponEditScreenState extends State<CouponEditScreen> {
   Widget build(BuildContext context) {
     final isNew = _old == null;
     return Scaffold(
-      appBar: AppBar(title: Text(isNew ? 'كوبون جديد' : 'تعديل ${_old.code}')),
+      appBar: AppBar(
+        title: Text(isNew ? 'كوبون جديد' : 'تعديل ${_old.code}'),
+        actions: [
+          if (!isNew)
+            IconButton(
+              tooltip: 'حذف الكوبون',
+              icon: const Icon(Icons.delete_outline),
+              onPressed: _saving
+                  ? null
+                  : () => _confirmDelete(
+                        context,
+                        title: 'حذف الكوبون ${_old.code}؟',
+                        message: 'الكوبون ما يشتغل بعد. الطلبات اللي استعملته تبقى مثل ما هي.\n'
+                            'إذا تريد توقفه مؤقتاً، طفّي "شغال" بدال الحذف.',
+                        delete: () => context.read<StoreRepository>().deleteCoupon(_old.code),
+                      ),
+            ),
+        ],
+      ),
       body: Form(
         key: _formKey,
         child: ListView(
@@ -653,7 +704,24 @@ class _RecommendationRuleEditScreenState extends State<RecommendationRuleEditScr
     final categories = context.watch<List<Category>>();
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: Text(_rule == null ? 'عرض ذكي جديد' : 'تعديل العرض')),
+      appBar: AppBar(
+        title: Text(_rule == null ? 'عرض ذكي جديد' : 'تعديل العرض'),
+        actions: [
+          if (_rule != null)
+            IconButton(
+              tooltip: 'حذف العرض',
+              icon: const Icon(Icons.delete_outline),
+              onPressed: _saving
+                  ? null
+                  : () => _confirmDelete(
+                        context,
+                        title: 'حذف العرض؟',
+                        message: 'راح ينحذف "${_rule.title}" وما يبين للزبائن بعد.',
+                        delete: () => context.read<StoreRepository>().deleteRecommendationRule(_rule.id),
+                      ),
+            ),
+        ],
+      ),
       body: Form(
         key: _formKey,
         child: ListView(

@@ -167,7 +167,8 @@ service cloud.firestore {
       // عداد الاستعمال يغيره السيرفر بس.
       allow update: if isAdmin() && validCoupon(request.resource.data)
         && request.resource.data.get('usedCount', 0) == resource.data.get('usedCount', 0);
-      allow delete: if false;
+      // المدير يكدر يحذف الكوبون؛ الطلبات اللي استعملته تبقى (الرمز محفوظ بالطلب).
+      allow delete: if isAdmin();
 
       match /uses/{who} {
         allow read: if isAdmin();

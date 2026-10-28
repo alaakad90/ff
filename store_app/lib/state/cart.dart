@@ -7,17 +7,23 @@ class CartItem {
   final String note; // ملاحظة الزبون على هذا المنتج (اختياري)
   final String imageUrl; // صورة يرفقها الزبون ويا الملاحظة (اختياري)
   final String voiceUrl; // فويس يرفقه الزبون ويا الملاحظة (اختياري)
+  final Map<String, String> options; // اختيارات الزبون، مثل {اللون: أحمر}
   int quantity;
 
-  CartItem(this.product, this.quantity, {this.note = '', this.imageUrl = '', this.voiceUrl = ''});
+  CartItem(this.product, this.quantity,
+      {this.note = '', this.imageUrl = '', this.voiceUrl = '', this.options = const {}});
 
-  /// نفس المنتج بملاحظتين (أو مرفقات) مختلفة يكونن سطرين بالسلة.
-  String get key => itemKey(product, note, imageUrl, voiceUrl);
+  /// نفس المنتج بملاحظتين (أو مرفقات أو اختيارات) مختلفة يكونن سطرين بالسلة.
+  String get key => itemKey(product, note, imageUrl, voiceUrl, options);
 
-  static String itemKey(Product product, String note, [String imageUrl = '', String voiceUrl = '']) =>
-      '${product.id}\n$note\n$imageUrl\n$voiceUrl';
+  static String itemKey(Product product, String note,
+          [String imageUrl = '', String voiceUrl = '', Map<String, String> options = const {}]) =>
+      '${product.id}\n$note\n$imageUrl\n$voiceUrl\n${optionsLabel(options)}';
 
-  int get total => product.price * quantity;
+  /// سعر القطعة ويا زيادات الاختيارات.
+  int get unitPrice => product.priceWith(options);
+
+  int get total => unitPrice * quantity;
 }
 
 class Cart extends ChangeNotifier {
@@ -35,12 +41,18 @@ class Cart extends ChangeNotifier {
   int quantityOf(Product product) =>
       _items.values.where((item) => item.product.id == product.id).fold(0, (sum, item) => sum + item.quantity);
 
-  void add(Product product, [int quantity = 1, String note = '', String imageUrl = '', String voiceUrl = '']) {
+  void add(Product product,
+      [int quantity = 1,
+      String note = '',
+      String imageUrl = '',
+      String voiceUrl = '',
+      Map<String, String> options = const {}]) {
     note = note.trim();
-    final key = CartItem.itemKey(product, note, imageUrl, voiceUrl);
+    final key = CartItem.itemKey(product, note, imageUrl, voiceUrl, options);
     final item = _items[key];
     if (item == null) {
-      _items[key] = CartItem(product, quantity, note: note, imageUrl: imageUrl, voiceUrl: voiceUrl);
+      _items[key] =
+          CartItem(product, quantity, note: note, imageUrl: imageUrl, voiceUrl: voiceUrl, options: options);
     } else {
       item.quantity += quantity;
     }

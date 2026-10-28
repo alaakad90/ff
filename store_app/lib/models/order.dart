@@ -1,4 +1,5 @@
 import '../state/cart.dart';
+import 'product.dart';
 
 enum OrderStatus {
   pending('new', 'جديد'),
@@ -71,6 +72,7 @@ class OrderItem {
   final String note; // ملاحظة الزبون على هذا المنتج
   final String imageUrl; // صورة مرفقة ويا الملاحظة
   final String voiceUrl; // فويس مرفق ويا الملاحظة
+  final Map<String, String> options; // اختيارات الزبون، مثل {اللون: أحمر}
 
   const OrderItem({
     required this.productId,
@@ -80,6 +82,7 @@ class OrderItem {
     this.note = '',
     this.imageUrl = '',
     this.voiceUrl = '',
+    this.options = const {},
   });
 
   bool get hasAttachments => imageUrl.isNotEmpty || voiceUrl.isNotEmpty;
@@ -89,11 +92,12 @@ class OrderItem {
   factory OrderItem.fromCartItem(CartItem item) => OrderItem(
         productId: item.product.id,
         name: item.product.name,
-        price: item.product.price,
+        price: item.unitPrice,
         quantity: item.quantity,
         note: item.note,
         imageUrl: item.imageUrl,
         voiceUrl: item.voiceUrl,
+        options: item.options,
       );
 
   factory OrderItem.fromMap(Map<String, dynamic> data) => OrderItem(
@@ -104,6 +108,7 @@ class OrderItem {
         note: data['note'] as String? ?? '',
         imageUrl: data['imageUrl'] as String? ?? '',
         voiceUrl: data['voiceUrl'] as String? ?? '',
+        options: optionsFromList(data['options']),
       );
 
   Map<String, dynamic> toMap() => {
@@ -114,6 +119,7 @@ class OrderItem {
         if (note.isNotEmpty) 'note': note,
         if (imageUrl.isNotEmpty) 'imageUrl': imageUrl,
         if (voiceUrl.isNotEmpty) 'voiceUrl': voiceUrl,
+        if (options.isNotEmpty) 'options': optionsToList(options),
       };
 }
 

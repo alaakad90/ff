@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import {
-  computeQuote, DEFAULT_LOYALTY, evaluateCoupon, loyaltySettings, maxRedeemablePoints, phoneKey, pointsFor,
+  choiceExtra, computeQuote, DEFAULT_LOYALTY, validOptions, evaluateCoupon, loyaltySettings, maxRedeemablePoints, phoneKey, pointsFor,
 } from '../src/pricing.js';
 
 const now = new Date('2026-10-26T10:00:00Z');
@@ -140,4 +140,60 @@ it('delivery zones: defaults, owner edits, and bad entries dropped', async () =>
   ] });
   assert.deepEqual(custom.map((z) => z.id), ['afak', 'off']);
   assert.equal(findZone(custom, 'off'), null);
+});
+
+describe('product options', () => {
+  const board = {
+    name: 'بورد', price: 20000,
+    options: [
+      { name: 'اللون', choices: ['أبيض', 'أسود'], required: true },
+      { name: 'نوع الخط', choices: ['كوفي', 'ديواني'], required: false },
+    ],
+  };
+  it('accepts real choices and needs the required fields', () => {
+    assert.equal(validOptions(board, [{ name: 'اللون', value: 'أسود' }]), true);
+    assert.equal(validOptions(board, [{ name: 'اللون', value: 'أبيض' }, { name: 'نوع الخط', value: 'كوفي' }]), true);
+    assert.equal(validOptions(board, [{ name: 'نوع الخط', value: 'كوفي' }]), false, 'colour is required');
+    assert.equal(validOptions(board, [{ name: 'اللون', value: 'أحمر' }]), false, 'not one of the choices');
+    assert.equal(validOptions(board, [{ name: 'القياس', value: 'كبير' }]), false, 'no such field');
+    assert.equal(validOptions({ price: 1 }, [{ name: 'اللون', value: 'أبيض' }]), false);
+  });
+  it('old app lines without options still go through', () => {
+    assert.equal(validOptions(board, []), true);
+  });
+  it('a line with a removed choice is listed as changed, and the choice is kept on the item', () => {
+    const quote = computeQuote({
+      lines: [
+        { productId: 'b', quantity: 1, options: [{ name: 'اللون', value: 'أسود' }] },
+        { productId: 'b2', quantity: 1, options: [{ name: 'اللون', value: 'ذهبي' }] },
+      ],
+      products: new Map([['b', board], ['b2', board]]),
+      loyalty: DEFAULT_LOYALTY,
+      now,
+    });
+    assert.deepEqual(quote.items[0].options, [{ name: 'اللون', value: 'أسود' }]);
+    assert.deepEqual(quote.unavailable, [{ productId: 'b2', name: 'بورد', reason: 'options' }]);
+    assert.equal(quote.subtotal, 20000);
+  });
+  it('a choice with an extra price raises the item price, from the product not the app', () => {
+    const sized = {
+      name: 'لوحة', price: 15000,
+      options: [{ name: 'القياس', choices: ['صغير', 'كبير'], extras: { كبير: 5000, صغير: -900 } }],
+    };
+    assert.equal(choiceExtra(sized.options[0], 'كبير'), 5000);
+    assert.equal(choiceExtra(sized.options[0], 'صغير'), 0, 'never a negative extra');
+    const quote = computeQuote({
+      lines: [
+        { productId: 's', quantity: 2, options: [{ name: 'القياس', value: 'كبير', extra: 1 }] },
+        { productId: 's', quantity: 1, options: [{ name: 'القياس', value: 'صغير' }] },
+      ],
+      products: new Map([['s', sized]]),
+      loyalty: DEFAULT_LOYALTY,
+      now,
+    });
+    assert.equal(quote.items[0].price, 20000);
+    assert.deepEqual(quote.items[0].options, [{ name: 'القياس', value: 'كبير', extra: 5000 }]);
+    assert.equal(quote.items[1].price, 15000);
+    assert.equal(quote.subtotal, 55000);
+  });
 });

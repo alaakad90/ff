@@ -12,55 +12,70 @@ const brandCream = Color(0xFFF7F5F2);
 String? get appFontFamily =>
     defaultTargetPlatform == TargetPlatform.iOS ? null : 'IBMPlexSansArabic';
 
-ThemeData buildTheme() {
+// الوضع الليلي: خلفية فحمي، والبطاقات أفتح شوية، والأحمر نفسه.
+const _darkBackground = Color(0xFF141416);
+const _darkCard = Color(0xFF1F1F23);
+const _darkText = Color(0xFFF2F2F2);
+
+ThemeData buildTheme([Brightness brightness = Brightness.light]) {
+  final dark = brightness == Brightness.dark;
+  final background = dark ? _darkBackground : brandCream;
+  final card = dark ? _darkCard : Colors.white;
+  final text = dark ? _darkText : brandBlack;
+  // حدود خفيفة: أسود على الفاتح، أبيض على الداكن.
+  Color line(double alpha) => (dark ? Colors.white : Colors.black).withValues(alpha: alpha);
   final colors = ColorScheme.fromSeed(
     seedColor: brandRed,
-    primary: brandBlack,
-    onPrimary: Colors.white,
+    brightness: brightness,
+    // الأزرار الأساسية: أسود بالفاتح، وأبيض بالداكن.
+    primary: text,
+    onPrimary: dark ? brandBlack : Colors.white,
     secondary: brandRed,
     onSecondary: Colors.white,
-    secondaryContainer: const Color(0xFFFDE4E2),
-    onSecondaryContainer: const Color(0xFF7A1212),
-    surface: brandCream,
-    onSurface: brandBlack,
+    secondaryContainer: dark ? const Color(0xFF5A1A1A) : const Color(0xFFFDE4E2),
+    onSecondaryContainer: dark ? const Color(0xFFFFDAD6) : const Color(0xFF7A1212),
+    surface: background,
+    onSurface: text,
   );
 
   final font = appFontFamily;
   return ThemeData(
+    brightness: brightness,
     colorScheme: colors,
     fontFamily: font,
-    scaffoldBackgroundColor: brandCream,
+    scaffoldBackgroundColor: background,
+    canvasColor: background,
     appBarTheme: AppBarTheme(
-      backgroundColor: brandCream,
-      foregroundColor: brandBlack,
+      backgroundColor: background,
+      foregroundColor: text,
       surfaceTintColor: Colors.transparent,
       centerTitle: true,
       titleTextStyle: TextStyle(
         fontSize: 19,
         fontWeight: FontWeight.w600,
-        color: brandBlack,
+        color: text,
         fontFamily: font,
       ),
     ),
     cardTheme: CardThemeData(
-      color: Colors.white,
+      color: card,
       elevation: 0,
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.black.withValues(alpha: 0.06)),
+        side: BorderSide(color: line(0.06)),
       ),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: Colors.white,
+      fillColor: card,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: Colors.black.withValues(alpha: 0.12)),
+        borderSide: BorderSide(color: line(0.12)),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: Colors.black.withValues(alpha: 0.12)),
+        borderSide: BorderSide(color: line(0.12)),
       ),
     ),
     filledButtonTheme: FilledButtonThemeData(
@@ -76,7 +91,7 @@ ThemeData buildTheme() {
       ),
     ),
     navigationBarTheme: NavigationBarThemeData(
-      backgroundColor: Colors.white,
+      backgroundColor: card,
       surfaceTintColor: Colors.transparent,
       indicatorColor: colors.secondaryContainer,
       labelTextStyle: WidgetStateProperty.resolveWith(
@@ -84,17 +99,17 @@ ThemeData buildTheme() {
           fontSize: 12,
           fontFamily: font,
           fontWeight: states.contains(WidgetState.selected) ? FontWeight.w600 : FontWeight.w400,
-          color: states.contains(WidgetState.selected) ? brandRed : brandBlack,
+          color: states.contains(WidgetState.selected) ? brandRed : text,
         ),
       ),
       iconTheme: WidgetStateProperty.resolveWith(
         (states) => IconThemeData(
-          color: states.contains(WidgetState.selected) ? brandRed : brandBlack,
+          color: states.contains(WidgetState.selected) ? brandRed : text,
         ),
       ),
     ),
     chipTheme: ChipThemeData(
-      backgroundColor: Colors.white,
+      backgroundColor: card,
       selectedColor: colors.secondaryContainer,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
     ),

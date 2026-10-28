@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 
 import '../models/order.dart';
+import '../models/product.dart';
 import '../state/cart.dart';
 import 'auth_service.dart';
 
@@ -15,6 +16,7 @@ class OrderLine {
   final String note;
   final String imageUrl;
   final String voiceUrl;
+  final Map<String, String> options;
 
   const OrderLine({
     required this.productId,
@@ -22,6 +24,7 @@ class OrderLine {
     this.note = '',
     this.imageUrl = '',
     this.voiceUrl = '',
+    this.options = const {},
   });
 
   factory OrderLine.fromCartItem(CartItem item) => OrderLine(
@@ -30,6 +33,7 @@ class OrderLine {
         note: item.note,
         imageUrl: item.imageUrl,
         voiceUrl: item.voiceUrl,
+        options: item.options,
       );
 
   Map<String, dynamic> toJson() => {
@@ -38,6 +42,7 @@ class OrderLine {
         if (note.isNotEmpty) 'note': note,
         if (imageUrl.isNotEmpty) 'imageUrl': imageUrl,
         if (voiceUrl.isNotEmpty) 'voiceUrl': voiceUrl,
+        if (options.isNotEmpty) 'options': optionsToList(options),
       };
 }
 
@@ -46,8 +51,12 @@ class QuoteLine {
   final String name;
   final int price;
   final int quantity;
+  final Map<String, String> options;
 
-  const QuoteLine(this.productId, this.name, this.price, this.quantity);
+  const QuoteLine(this.productId, this.name, this.price, this.quantity, {this.options = const {}});
+
+  /// يطابق سطر السلة بنفس المنتج ونفس الاختيارات.
+  String get key => '$productId\n${optionsLabel(options)}';
 }
 
 /// حساب السعر من السيرفر: الأسعار الحالية والخصومات والنقاط.
@@ -92,11 +101,13 @@ class OrderQuote {
         items: [
           for (final i in j['items'] as List? ?? const [])
             QuoteLine(i['productId'] as String, i['name'] as String? ?? '', (i['price'] as num).toInt(),
-                (i['quantity'] as num).toInt()),
+                (i['quantity'] as num).toInt(),
+                options: optionsFromList(i['options'])),
         ],
         unavailable: [
           for (final u in j['unavailable'] as List? ?? const [])
-            (u['name'] as String?)?.isNotEmpty == true ? u['name'] as String : u['productId'] as String,
+            ((u['name'] as String?)?.isNotEmpty == true ? u['name'] as String : u['productId'] as String) +
+                (u['reason'] == 'options' ? ' (خياراته تغيرت، احذفه واختاره من جديد)' : ''),
         ],
         subtotal: (j['subtotal'] as num?)?.toInt() ?? 0,
         couponCode: (j['coupon'] as Map?)?['code'] as String? ?? '',
@@ -294,6 +305,7 @@ class HttpStoreApi implements StoreApi {
           name: i['name'] as String? ?? '',
           price: (i['price'] as num?)?.toInt() ?? 0,
           quantity: (i['quantity'] as num?)?.toInt() ?? 0,
+          options: optionsFromList(i['options']),
         ),
     ];
     final total = (j['total'] as num?)?.toInt() ?? 0;

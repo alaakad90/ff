@@ -184,9 +184,9 @@ class _CategoryEditScreenState extends State<CategoryEditScreen> {
                   width: 48,
                   height: 48,
                   decoration: BoxDecoration(
-                    color: _iconKey == entry.key ? colors.secondary : Colors.white,
+                    color: _iconKey == entry.key ? colors.secondary : Theme.of(context).cardTheme.color,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.black12),
+                    border: Border.all(color: colors.outlineVariant),
                   ),
                   child: Icon(
                     entry.value,
@@ -455,11 +455,12 @@ class _StoreInfoFormState extends State<_StoreInfoForm> {
   late final _address = TextEditingController(text: _initial.address);
   late final _hours = TextEditingController(text: _initial.hours);
   late final _instagram = TextEditingController(text: _initial.instagram);
+  late final _facebook = TextEditingController(text: _initial.facebook);
   bool _saving = false;
 
   @override
   void dispose() {
-    for (final c in [_about, _phone, _whatsapp, _address, _hours, _instagram]) {
+    for (final c in [_about, _phone, _whatsapp, _address, _hours, _instagram, _facebook]) {
       c.dispose();
     }
     super.dispose();
@@ -476,6 +477,7 @@ class _StoreInfoFormState extends State<_StoreInfoForm> {
             address: _address.text.trim(),
             hours: _hours.text.trim(),
             instagram: _instagram.text.trim(),
+            facebook: _facebook.text.trim(),
           ));
       messenger.showSnackBar(const SnackBar(content: Text('انحفظت معلومات المتجر')));
     } catch (_) {
@@ -532,6 +534,17 @@ class _StoreInfoFormState extends State<_StoreInfoForm> {
             controller: _instagram,
             textDirection: TextDirection.ltr,
             decoration: const InputDecoration(labelText: 'إنستغرام', hintText: '@lacasa3d'),
+          ),
+          _gap,
+          TextFormField(
+            controller: _facebook,
+            textDirection: TextDirection.ltr,
+            keyboardType: TextInputType.url,
+            decoration: const InputDecoration(
+              labelText: 'فيسبوك',
+              hintText: 'https://facebook.com/lacasa3d',
+              helperText: 'رابط الصفحة أو اسمها. يبين زر "تابعنا على فيسبوك" بصفحة عن المتجر',
+            ),
           ),
           const SizedBox(height: 24),
           FilledButton(onPressed: _saving ? null : _save, child: const Text('حفظ')),

@@ -132,6 +132,31 @@ void main() {
       expect(items.map((i) => (i.product.id, i.product.price)), [('wb', 35000), ('ck', 50000)]);
     });
 
+    test('keeps the chosen options, and asks again when they no longer exist', () {
+      const sign = Product(id: 'sg', name: 'لوحة اسم', price: 15000, categoryId: 'boards', options: [
+        ProductOption(name: 'اللون', choices: ['أبيض', 'أسود']),
+      ]);
+      StoreOrder ordered(Map<String, String> options) => StoreOrder(
+            customer: const Customer(name: 'زينب', phone: '07700000000'),
+            items: [OrderItem(productId: 'sg', name: 'لوحة اسم', price: 15000, quantity: 1, options: options)],
+            total: 15000,
+            deliveryDay: 'الأحد',
+            createdAt: DateTime(2026, 10, 1),
+          );
+      final kept = planReorder(ordered({'اللون': 'أسود'}), [sign]);
+      expect(kept.single.available, isTrue);
+      expect(reorderCartItems(kept).single.options, {'اللون': 'أسود'});
+      expect(planReorder(ordered({'اللون': 'ذهبي'}), [sign]).single.available, isFalse, reason: 'choice removed');
+      expect(planReorder(ordered({}), [sign]).single.available, isFalse, reason: 'colour now required');
+      // الأسود صار يزيد 2,000: إعادة الطلب تبين السعر الجديد.
+      const pricier = Product(id: 'sg', name: 'لوحة اسم', price: 15000, categoryId: 'boards', options: [
+        ProductOption(name: 'اللون', choices: ['أبيض', 'أسود'], extras: {'أسود': 2000}),
+      ]);
+      final line = planReorder(ordered({'اللون': 'أسود'}), [pricier]).single;
+      expect((line.change, line.currentTotal), (ReorderChange.pricier, 17000));
+      expect(reorderCartItems([line]).single.total, 17000);
+    });
+
     testWidgets('customer reorders from their order history', (tester) async {
       usePhoneSize(tester);
       const pricier = Product(id: 'ck', name: 'ساعة جدار', price: 55000, categoryId: 'decor');
@@ -506,6 +531,48 @@ void main() {
       await tester.pumpAndSettle();
       expect(repo.coupons['FREESHIP']?.type, CouponType.freeDelivery);
       expect(repo.coupons['FREESHIP']?.value, 0);
+    });
+
+    testWidgets('deletes a coupon, a smart offer and an order after confirming', (tester) async {
+      final (repo, _) = await openAdmin(tester, 'الكوبونات');
+      repo.coupons['OLD10'] = const Coupon(code: 'OLD10', value: 10);
+      await repo.saveRecommendationRule(weddingRule);
+      await repo.putOrder(pastOrder('o1', [clock], status: OrderStatus.pending));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.textContaining('OLD10'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('حذف الكوبون'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('لا'));
+      await tester.pumpAndSettle();
+      expect(repo.coupons, contains('OLD10'), reason: 'cancel keeps it');
+      await tester.tap(find.byTooltip('حذف الكوبون'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('احذف'));
+      await tester.pumpAndSettle();
+      expect(repo.coupons, isNot(contains('OLD10')));
+
+      await tapAdminTab(tester, 'عروض ذكية');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('كمّل فرحتكم: عقود الزواج'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('حذف العرض'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('احذف'));
+      await tester.pumpAndSettle();
+      expect(repo.rules, isEmpty);
+
+      await tapAdminTab(tester, 'الطلبات');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('زينب'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('حذف الطلب'));
+      await tester.tap(find.text('حذف الطلب'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('احذف'));
+      await tester.pumpAndSettle();
+      expect(repo.orders, isEmpty);
     });
 
     testWidgets('saves loyalty settings', (tester) async {
