@@ -12,6 +12,7 @@ import 'package:lacasa_store/models/order.dart';
 import 'package:lacasa_store/models/product.dart';
 import 'package:lacasa_store/models/stats.dart';
 import 'package:lacasa_store/screens/admin/stats_tab.dart';
+import 'package:lacasa_store/screens/product_screen.dart';
 import 'package:lacasa_store/screens/search_screen.dart';
 import 'package:lacasa_store/services/contact.dart';
 import 'package:lacasa_store/services/instagram.dart';
@@ -566,6 +567,114 @@ void main() {
     expect(find.text('خصم 20%'), findsOneWidget);
   });
 
+  testWidgets('admin adds option fields and the customer must pick before adding to cart', (tester) async {
+    usePhoneSize(tester);
+    final repo = InMemoryStoreRepository(
+      categories: sampleCategories,
+      products: [const Product(id: 'p1', name: 'لوحة اسم', price: 15000, categoryId: 'gifts')],
+    );
+    final auth = FakeAuthService(adminEmails: {'owner@example.com'});
+    await tester.pumpWidget(app(repo, auth: auth));
+    await tester.pumpAndSettle();
+    await tapTab(tester, 'الحساب');
+    await tester.enterText(find.byType(TextFormField).at(0), 'owner@example.com');
+    await tester.enterText(find.byType(TextFormField).at(1), 'secret');
+    await tester.tap(find.widgetWithText(FilledButton, 'دخول'));
+    await tester.pumpAndSettle();
+    await tapAdminTab(tester, 'المنتجات');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('لوحة اسم'));
+    await tester.pumpAndSettle();
+
+    final form = find.descendant(of: find.byType(Form), matching: find.byType(Scrollable)).first;
+    Future<void> show(Finder f) async {
+      await tester.scrollUntilVisible(f, 200, scrollable: form);
+      await tester.pumpAndSettle();
+    }
+
+    // حقل بلا اختيارات ما ينحفظ.
+    await show(find.text('إضافة حقل'));
+    await tester.tap(find.text('إضافة حقل'));
+    await tester.pumpAndSettle();
+    await show(find.widgetWithText(TextFormField, 'اسم الحقل 1'));
+    await tester.enterText(find.widgetWithText(TextFormField, 'اسم الحقل 1'), 'اللون');
+    await tester.tap(find.text('حفظ'));
+    await tester.pumpAndSettle();
+    expect(find.text('ضيف اختيار واحد على الأقل'), findsOneWidget);
+    expect((await repo.watchProducts().first).single.options, isEmpty);
+
+    await show(find.widgetWithText(TextField, 'اختيار جديد'));
+    await tester.enterText(find.widgetWithText(TextField, 'اختيار جديد'), 'أبيض');
+    await tester.tap(find.byTooltip('أضف الاختيار'));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(InputChip, 'أبيض'), findsOneWidget);
+    // اختيار مكتوب وما انضغط "+": ينحفظ هم.
+    await tester.enterText(find.widgetWithText(TextField, 'اختيار جديد'), 'أسود');
+
+    // حقل ثاني اختياري: نوع الخط.
+    await show(find.text('إضافة حقل'));
+    await tester.tap(find.text('إضافة حقل'));
+    await tester.pumpAndSettle();
+    await show(find.widgetWithText(TextFormField, 'اسم الحقل 2'));
+    await tester.enterText(find.widgetWithText(TextFormField, 'اسم الحقل 2'), 'نوع الخط');
+    await tester.enterText(find.widgetWithText(TextField, 'اختيار جديد').last, 'كوفي');
+    await tester.tap(find.byTooltip('أضف الاختيار').last);
+    await tester.pumpAndSettle();
+    await show(find.text('لازم الزبون يختار').last);
+    await tester.tap(find.text('لازم الزبون يختار').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('حفظ'));
+    await tester.pumpAndSettle();
+
+    final saved = (await repo.watchProducts().first).single;
+    expect([for (final o in saved.options) '${o.name}: ${o.choices.join('/')} ${o.required}'], [
+      'اللون: أبيض/أسود true',
+      'نوع الخط: كوفي false',
+    ]);
+    expect(Product.fromMap('p1', saved.toMap()).options.length, 2, reason: 'survives Firestore round trip');
+
+    // الزبون: زر السلة بالشبكة يفتح صفحة المنتج حتى يختار اللون.
+    await tester.tap(find.byTooltip('تسجيل خروج'));
+    await tester.pumpAndSettle();
+    await tapTab(tester, 'الرئيسية');
+    await tester.tap(find.byTooltip('أضف للسلة').first);
+    await tester.pumpAndSettle();
+    expect(find.text('نوع الخط (اختياري)'), findsOneWidget);
+
+    final add = find.textContaining('أضف للسلة •');
+    await tester.tap(add);
+    await tester.pumpAndSettle();
+    expect(find.text('اختار اللون'), findsOneWidget);
+    expect(find.byType(ProductScreen), findsOneWidget, reason: 'nothing added yet');
+
+    await tester.ensureVisible(find.widgetWithText(ChoiceChip, 'أسود'));
+    await tester.tap(find.widgetWithText(ChoiceChip, 'أسود'));
+    await tester.pumpAndSettle();
+    await tester.tap(add);
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+    await tapTab(tester, 'السلة');
+    expect(find.text('🔹 اللون: أسود'), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 3)); // رسالة "انضاف للسلة" تختفي
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('إكمال الطلب'));
+    await tester.pumpAndSettle();
+    final fields = find.byType(TextFormField);
+    await tester.enterText(fields.at(0), 'علي');
+    await tester.enterText(fields.at(1), '07701234567');
+    await tester.ensureVisible(find.text('استلام من المحل'));
+    await tester.tap(find.text('استلام من المحل'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.widgetWithText(ChoiceChip, 'الخميس'));
+    await tester.tap(find.widgetWithText(ChoiceChip, 'الخميس'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('أرسل الطلب'));
+    await tester.tap(find.text('أرسل الطلب'));
+    await tester.pumpAndSettle();
+    expect(repo.orders.single.items.single.options, {'اللون': 'أسود'});
+  });
+
   testWidgets('admin uploads a product photo from the phone', (tester) async {
     usePhoneSize(tester);
     final repo = InMemoryStoreRepository(categories: sampleCategories);
@@ -600,8 +709,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(uploader.picked, [MediaKind.image]);
 
+    // نرجع لفوك الصفحة (حقل الاسم).
+    await tester.scrollUntilVisible(find.widgetWithText(TextFormField, 'اسم المنتج'), -200,
+        scrollable: find.descendant(of: find.byType(Form), matching: find.byType(Scrollable)).first);
+    await tester.pumpAndSettle();
     await tester.enterText(find.widgetWithText(TextFormField, 'اسم المنتج'), 'ساعة خشب');
     await tester.enterText(find.widgetWithText(TextFormField, 'السعر'), '30000');
+    await tester.ensureVisible(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
     await tester.tap(find.byType(DropdownButtonFormField<String>));
     await tester.pumpAndSettle();
     await tester.tap(find.text('هدايا').last);

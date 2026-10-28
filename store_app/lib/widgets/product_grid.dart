@@ -116,6 +116,12 @@ class ProductCard extends StatelessWidget {
                     iconSize: 20,
                     icon: const Icon(Icons.add_shopping_cart),
                     onPressed: () {
+                      // منتج بيه خيارات إجبارية (مثل اللون): يفتح صفحته حتى الزبون يختار.
+                      if (product.options.any((o) => o.required)) {
+                        Navigator.of(context)
+                            .push(MaterialPageRoute(builder: (_) => ProductScreen(product: product)));
+                        return;
+                      }
                       context.read<Cart>().add(product);
                       showAddedToCart(context, product);
                     },

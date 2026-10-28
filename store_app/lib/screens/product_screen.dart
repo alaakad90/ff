@@ -27,11 +27,28 @@ class _ProductScreenState extends State<ProductScreen> {
   String _imageUrl = '';
   String _voiceUrl = '';
   bool _attaching = false;
+  final Map<String, String> _selected = {}; // اختيارات الزبون: اسم الحقل → الاختيار
 
   @override
   void dispose() {
     _note.dispose();
     super.dispose();
+  }
+
+  /// الاختيارات بنفس ترتيب حقول المنتج. إذا حقل إجباري ما مختار، ينبه الزبون ويرجع null.
+  Map<String, String>? _chosenOptions() {
+    for (final option in widget.product.options) {
+      if (option.required && !_selected.containsKey(option.name)) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text('اختار ${option.name}')));
+        return null;
+      }
+    }
+    return {
+      for (final option in widget.product.options)
+        if (_selected[option.name] != null) option.name: _selected[option.name]!,
+    };
   }
 
   @override
@@ -64,6 +81,30 @@ class _ProductScreenState extends State<ProductScreen> {
                 ),
                 const SizedBox(height: 16),
                 Text(product.description, style: theme.textTheme.bodyLarge),
+                for (final option in product.options) ...[
+                  const SizedBox(height: 16),
+                  Text(option.required ? option.name : '${option.name} (اختياري)',
+                      style: theme.textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final choice in option.choices)
+                        ChoiceChip(
+                          label: Text(choice),
+                          selected: _selected[option.name] == choice,
+                          onSelected: (on) => setState(() {
+                            if (on) {
+                              _selected[option.name] = choice;
+                            } else {
+                              _selected.remove(option.name);
+                            }
+                          }),
+                        ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 24),
                 Row(
                   children: [
@@ -136,7 +177,9 @@ class _ProductScreenState extends State<ProductScreen> {
                   onPressed: _attaching
                       ? null
                       : () {
-                          context.read<Cart>().add(product, _quantity, _note.text, _imageUrl, _voiceUrl);
+                          final options = _chosenOptions();
+                          if (options == null) return;
+                          context.read<Cart>().add(product, _quantity, _note.text, _imageUrl, _voiceUrl, options);
                           Navigator.of(context).pop();
                           showAddedToCart(context, product);
                         },
@@ -151,12 +194,19 @@ class _ProductScreenState extends State<ProductScreen> {
                   label: const Text('اطلب الآن'),
                   onPressed: _attaching
                       ? null
-                      : () => Navigator.of(context).push(MaterialPageRoute(
+                      : () {
+                          final options = _chosenOptions();
+                          if (options == null) return;
+                          Navigator.of(context).push(MaterialPageRoute(
                             builder: (_) => CheckoutScreen(items: [
                               CartItem(product, _quantity,
-                                  note: _note.text.trim(), imageUrl: _imageUrl, voiceUrl: _voiceUrl),
+                                  note: _note.text.trim(),
+                                  imageUrl: _imageUrl,
+                                  voiceUrl: _voiceUrl,
+                                  options: options),
                             ]),
-                          )),
+                          ));
+                        },
                 ),
               ),
             ],

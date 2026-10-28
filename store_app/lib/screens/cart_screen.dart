@@ -69,6 +69,8 @@ class CartScreen extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(item.product.name, style: theme.textTheme.titleMedium),
+                              if (item.options.isNotEmpty)
+                                Text('🔹 ${optionsLabel(item.options)}', style: theme.textTheme.bodySmall),
                               if (item.note.isNotEmpty)
                                 Text(
                                   '📝 ${item.note}',

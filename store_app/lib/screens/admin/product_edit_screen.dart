@@ -9,6 +9,7 @@ import '../../widgets/media_url_field.dart';
 import '../../widgets/price_tag.dart';
 import '../../widgets/product_image.dart';
 import 'content_editors.dart' show validateHttpsUrl;
+import 'product_options_editor.dart';
 
 class ProductEditScreen extends StatefulWidget {
   /// null يعني منتج جديد.
@@ -31,6 +32,7 @@ class _ProductEditScreenState extends State<ProductEditScreen> {
   late final _imageUrl = TextEditingController(text: widget.product?.imageUrl);
   late String _categoryId = widget.product?.categoryId ?? '';
   late bool _available = widget.product?.available ?? true;
+  late final _options = [for (final o in widget.product?.options ?? const <ProductOption>[]) OptionDraft.from(o)];
   bool _saving = false;
 
   bool get _isNew => widget.product == null;
@@ -42,6 +44,9 @@ class _ProductEditScreenState extends State<ProductEditScreen> {
     _price.dispose();
     _oldPrice.dispose();
     _imageUrl.dispose();
+    for (final o in _options) {
+      o.dispose();
+    }
     super.dispose();
   }
 
@@ -63,6 +68,7 @@ class _ProductEditScreenState extends State<ProductEditScreen> {
         categoryId: _categoryId,
         imageUrl: _imageUrl.text.trim(),
         available: _available,
+        options: [for (final o in _options) o.toOption()],
       );
   }
 
@@ -79,6 +85,13 @@ class _ProductEditScreenState extends State<ProductEditScreen> {
   }
 
   void _save() {
+    // اختيار مكتوب وما انضغط عليه "+": نضيفه بدال ما يضيع.
+    for (final o in _options) {
+      final pending = o.newChoice.text.trim();
+      if (pending.isNotEmpty && !o.choices.contains(pending)) o.choices.add(pending);
+      o.newChoice.clear();
+    }
+    setState(() {});
     if (!_formKey.currentState!.validate()) return;
     _run(() => context.read<StoreRepository>().saveProduct(_draft), 'ما كدرنا نحفظ المنتج');
   }
@@ -209,6 +222,8 @@ class _ProductEditScreenState extends State<ProductEditScreen> {
               value: _available,
               onChanged: (v) => setState(() => _available = v),
             ),
+            const Divider(height: 32),
+            ProductOptionsEditor(drafts: _options),
           ],
         ),
       ),

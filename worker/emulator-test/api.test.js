@@ -97,6 +97,33 @@ describe('placing orders', () => {
     assert.equal(res.body.code, 'unavailable');
   });
 
+  it('keeps the chosen options on the order and in the Telegram message', async () => {
+    const options = [{ name: 'اللون', value: 'أسود' }, { name: 'نوع الخط', value: 'ديواني' }];
+    const res = await api('/api/orders', orderBody({ items: [{ productId: 'p4', quantity: 1, options }] }));
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    const order = await db.get(`orders/${res.body.orderId}`);
+    assert.deepEqual(order.data.items[0].options, options);
+    const message = sent.telegram.at(-1).text;
+    assert.match(message, /اللون: أسود/);
+    assert.match(message, /نوع الخط: ديواني/);
+  });
+
+  it('refuses options that are not on the product, or a missing required one', async () => {
+    for (const options of [
+      [{ name: 'اللون', value: 'أحمر' }],
+      [{ name: 'نوع الخط', value: 'كوفي' }],
+      [{ name: 'القياس', value: 'كبير' }],
+    ]) {
+      const res = await api('/api/orders', orderBody({ items: [{ productId: 'p4', quantity: 1, options }] }));
+      assert.equal(res.status, 409, JSON.stringify(options));
+      assert.equal(res.body.code, 'unavailable');
+      assert.equal(res.body.quote.unavailable[0].reason, 'options');
+    }
+    const bad = await api('/api/orders', orderBody({ items: [{ productId: 'p4', quantity: 1, options: 'أسود' }] }));
+    assert.equal(bad.status, 400);
+    assert.equal((await db.query('orders')).length, 0);
+  });
+
   it('validates the customer, day and pickup method', async () => {
     assert.equal((await api('/api/orders', orderBody({ customer: { name: 'x', phone: '123' } }))).status, 400);
     assert.equal((await api('/api/orders', orderBody({ deliveryDay: 'Monday' }))).status, 400);

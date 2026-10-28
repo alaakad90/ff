@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 
 import '../models/order.dart';
+import '../models/product.dart';
 import '../state/cart.dart';
 import 'auth_service.dart';
 
@@ -15,6 +16,7 @@ class OrderLine {
   final String note;
   final String imageUrl;
   final String voiceUrl;
+  final Map<String, String> options;
 
   const OrderLine({
     required this.productId,
@@ -22,6 +24,7 @@ class OrderLine {
     this.note = '',
     this.imageUrl = '',
     this.voiceUrl = '',
+    this.options = const {},
   });
 
   factory OrderLine.fromCartItem(CartItem item) => OrderLine(
@@ -30,6 +33,7 @@ class OrderLine {
         note: item.note,
         imageUrl: item.imageUrl,
         voiceUrl: item.voiceUrl,
+        options: item.options,
       );
 
   Map<String, dynamic> toJson() => {
@@ -38,6 +42,7 @@ class OrderLine {
         if (note.isNotEmpty) 'note': note,
         if (imageUrl.isNotEmpty) 'imageUrl': imageUrl,
         if (voiceUrl.isNotEmpty) 'voiceUrl': voiceUrl,
+        if (options.isNotEmpty) 'options': optionsToList(options),
       };
 }
 
@@ -96,7 +101,8 @@ class OrderQuote {
         ],
         unavailable: [
           for (final u in j['unavailable'] as List? ?? const [])
-            (u['name'] as String?)?.isNotEmpty == true ? u['name'] as String : u['productId'] as String,
+            ((u['name'] as String?)?.isNotEmpty == true ? u['name'] as String : u['productId'] as String) +
+                (u['reason'] == 'options' ? ' (خياراته تغيرت، احذفه واختاره من جديد)' : ''),
         ],
         subtotal: (j['subtotal'] as num?)?.toInt() ?? 0,
         couponCode: (j['coupon'] as Map?)?['code'] as String? ?? '',

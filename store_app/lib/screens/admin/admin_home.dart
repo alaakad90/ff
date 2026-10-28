@@ -302,7 +302,10 @@ class _OrderCard extends StatelessWidget {
           const Divider(),
           for (final item in order.items) ...[
             Row(children: [
-              Expanded(child: Text('${item.name} × ${item.quantity}${item.note.isEmpty ? '' : '\n📝 ${item.note}'}')),
+              Expanded(
+                  child: Text('${item.name} × ${item.quantity}'
+                      '${item.options.isEmpty ? '' : '\n🔹 ${optionsLabel(item.options)}'}'
+                      '${item.note.isEmpty ? '' : '\n📝 ${item.note}'}')),
               Text(formatPrice(item.total)),
             ]),
             if (item.hasAttachments)

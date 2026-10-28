@@ -132,6 +132,24 @@ void main() {
       expect(items.map((i) => (i.product.id, i.product.price)), [('wb', 35000), ('ck', 50000)]);
     });
 
+    test('keeps the chosen options, and asks again when they no longer exist', () {
+      const sign = Product(id: 'sg', name: 'لوحة اسم', price: 15000, categoryId: 'boards', options: [
+        ProductOption(name: 'اللون', choices: ['أبيض', 'أسود']),
+      ]);
+      StoreOrder ordered(Map<String, String> options) => StoreOrder(
+            customer: const Customer(name: 'زينب', phone: '07700000000'),
+            items: [OrderItem(productId: 'sg', name: 'لوحة اسم', price: 15000, quantity: 1, options: options)],
+            total: 15000,
+            deliveryDay: 'الأحد',
+            createdAt: DateTime(2026, 10, 1),
+          );
+      final kept = planReorder(ordered({'اللون': 'أسود'}), [sign]);
+      expect(kept.single.available, isTrue);
+      expect(reorderCartItems(kept).single.options, {'اللون': 'أسود'});
+      expect(planReorder(ordered({'اللون': 'ذهبي'}), [sign]).single.available, isFalse, reason: 'choice removed');
+      expect(planReorder(ordered({}), [sign]).single.available, isFalse, reason: 'colour now required');
+    });
+
     testWidgets('customer reorders from their order history', (tester) async {
       usePhoneSize(tester);
       const pricier = Product(id: 'ck', name: 'ساعة جدار', price: 55000, categoryId: 'decor');

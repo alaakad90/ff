@@ -7,6 +7,7 @@ class Product {
   final String categoryId;
   final String imageUrl;
   final bool available;
+  final List<ProductOption> options; // حقول يختارها الزبون، مثل اللون أو نوع الخط
 
   const Product({
     this.id = '',
@@ -17,6 +18,7 @@ class Product {
     required this.categoryId,
     this.imageUrl = '',
     this.available = true,
+    this.options = const [],
   });
 
   /// عليه تخفيض: السعر القديم أكبر من الحالي.
@@ -35,6 +37,10 @@ class Product {
       categoryId: data['categoryId'] as String? ?? '',
       imageUrl: data['imageUrl'] as String? ?? '',
       available: data['available'] as bool? ?? true,
+      options: [
+        for (final o in data['options'] as List? ?? const [])
+          if (o is Map) ProductOption.fromMap(Map<String, dynamic>.from(o)),
+      ].where((o) => o.name.isNotEmpty && o.choices.isNotEmpty).toList(),
     );
   }
 
@@ -46,6 +52,7 @@ class Product {
         'categoryId': categoryId,
         'imageUrl': imageUrl,
         'available': available,
+        'options': [for (final o in options) o.toMap()],
       };
 
   Product copyWith({String? id, bool? available}) {
@@ -58,9 +65,44 @@ class Product {
       categoryId: categoryId,
       imageUrl: imageUrl,
       available: available ?? this.available,
+      options: options,
     );
   }
 }
+
+/// حقل يضيفه المدير للمنتج (مثل "اللون") ويا الاختيارات اللي يختار منها الزبون.
+class ProductOption {
+  final String name;
+  final List<String> choices;
+  final bool required; // الزبون لازم يختار قبل ما يضيف للسلة
+
+  const ProductOption({required this.name, required this.choices, this.required = true});
+
+  factory ProductOption.fromMap(Map<String, dynamic> data) => ProductOption(
+        name: (data['name'] as String? ?? '').trim(),
+        choices: [
+          for (final c in data['choices'] as List? ?? const [])
+            if (c is String && c.trim().isNotEmpty) c.trim(),
+        ],
+        required: data['required'] as bool? ?? true,
+      );
+
+  Map<String, dynamic> toMap() => {'name': name, 'choices': choices, 'required': required};
+}
+
+/// الاختيارات بسطر واحد، مثل: اللون: أحمر، نوع الخط: كوفي
+String optionsLabel(Map<String, String> options) =>
+    options.entries.map((e) => '${e.key}: ${e.value}').join('، ');
+
+/// الاختيارات من Firestore أو السيرفر: [{name, value}] بنفس الترتيب.
+Map<String, String> optionsFromList(Object? raw) => {
+      for (final o in raw is List ? raw : const [])
+        if (o is Map && o['name'] is String && o['value'] is String) o['name'] as String: o['value'] as String,
+    };
+
+List<Map<String, String>> optionsToList(Map<String, String> options) => [
+      for (final e in options.entries) {'name': e.key, 'value': e.value},
+    ];
 
 /// السعر القديم بعد ما ينزل السعر: إذا المدير نزّل السعر وما كتب سعر قبل التخفيض،
 /// ناخذ السعر اللي چان قبل. وإذا السعر رجع مثل القديم أو أكثر، يروح التخفيض.

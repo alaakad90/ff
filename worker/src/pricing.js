@@ -126,8 +126,22 @@ export function pointsFor(loyalty, paid) {
 }
 
 /**
+ * كل اختيار لازم يكون حقل موجود بالمنتج وقيمة من اختياراته، والحقول الإجبارية مختارة.
+ * الطلبات القديمة (بلا أي اختيارات) تنقبل حتى لو المنتج بيه حقول: صاحب المتجر يسأل الزبون.
+ */
+export function validOptions(product, chosen) {
+  const fields = Array.isArray(product?.options) ? product.options : [];
+  for (const { name, value } of chosen) {
+    const field = fields.find((f) => f?.name === name);
+    if (!field || !Array.isArray(field.choices) || !field.choices.includes(value)) return false;
+  }
+  if (!chosen.length) return true;
+  return fields.every((f) => f?.required === false || chosen.some((c) => c.name === f?.name));
+}
+
+/**
  * الحساب الكامل.
- * lines: [{ productId, quantity, note, imageUrl, voiceUrl }]
+ * lines: [{ productId, quantity, note, imageUrl, voiceUrl, options }]
  * products: Map(productId → بيانات المنتج من Firestore أو null)
  * deliveryFee: أجور التوصيل للمحافظة (0 للاستلام من المحل). الكوبون والنقاط على المنتجات بس،
  * والتوصيل يبقى ثابت إلا إذا الكوبون "توصيل مجاني".
@@ -147,6 +161,11 @@ export function computeQuote({
       unavailable.push({ productId: line.productId, name: product?.name || '' });
       continue;
     }
+    // الاختيارات لازم تكون من اللي حطها المدير للمنتج هسه (إذا تغيرت، الزبون يختار من جديد).
+    if (!validOptions(product, line.options || [])) {
+      unavailable.push({ productId: line.productId, name: String(product.name || ''), reason: 'options' });
+      continue;
+    }
     items.push({
       productId: line.productId,
       name: String(product.name || ''),
@@ -155,6 +174,7 @@ export function computeQuote({
       ...(line.note ? { note: line.note } : {}),
       ...(line.imageUrl ? { imageUrl: line.imageUrl } : {}),
       ...(line.voiceUrl ? { voiceUrl: line.voiceUrl } : {}),
+      ...(line.options?.length ? { options: line.options } : {}),
     });
   }
   const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);

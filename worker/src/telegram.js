@@ -41,6 +41,7 @@ export function buildMessage(orderId, order) {
     const quantity = Number(item.quantity) || 0;
     const price = Number(item.price) || 0;
     lines.push(`• ${item.name} × ${quantity} = ${formatPrice(price * quantity)}`);
+    for (const option of item.options || []) lines.push(`   🔹 ${option.name}: ${option.value}`);
     if (item.note) lines.push(`   📝 ${item.note}`);
     if (item.imageUrl) lines.push(`   🖼️ صورة: ${item.imageUrl}`);
     if (item.voiceUrl) lines.push(`   🎤 فويس: ${item.voiceUrl}`);
