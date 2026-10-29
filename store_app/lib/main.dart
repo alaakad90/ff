@@ -42,7 +42,8 @@ Future<void> main() async {
   auth.watchSession().listen((session) {
     if (session.signedIn) repository.recordMember(session.uid).catchError((_) {});
   });
-  runApp(StoreApp(repository: repository, auth: auth));
+  // بالموقع ما نبين شاشة الشعار: المتصفح يفتح المتجر مباشرة. بالتطبيق تبقى.
+  runApp(StoreApp(repository: repository, auth: auth, showSplash: !kIsWeb));
 }
 
 final messengerKey = GlobalKey<ScaffoldMessengerState>();
